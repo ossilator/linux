@@ -108,7 +108,7 @@ snd_emu10k1_synth_get_voice(struct snd_emu10k1 *hw)
 	}
 
 	/* not found */
-	return -ENOMEM;
+	return -EBUSY;
 }
 
 

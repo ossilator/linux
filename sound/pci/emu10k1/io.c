@@ -264,7 +264,7 @@ int snd_emu10k1_i2c_write(struct snd_emu10k1 *emu,
 		dev_err(emu->card->dev, "status=0x%x, reg=%d, value=%d\n",
 			status, reg, value);
 		/* dump_stack(); */
-		err = -EINVAL;
+		err = -EIO;
 	}
     
 	spin_unlock(&emu->i2c_lock);
