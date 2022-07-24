@@ -390,7 +390,7 @@ static int snd_emu10k1_gpr_ctl_put(struct snd_kcontrol *kcontrol, struct snd_ctl
 			break;
 		case EMU10K1_GPR_TRANSLATION_BASS:
 			if ((ctl->count % 5) != 0 || (ctl->count / 5) != ctl->vcount) {
-				change = -EIO;
+				change = -EINVAL;
 				goto __error;
 			}
 			for (j = 0; j < 5; j++)
@@ -398,7 +398,7 @@ static int snd_emu10k1_gpr_ctl_put(struct snd_kcontrol *kcontrol, struct snd_ctl
 			break;
 		case EMU10K1_GPR_TRANSLATION_TREBLE:
 			if ((ctl->count % 5) != 0 || (ctl->count / 5) != ctl->vcount) {
-				change = -EIO;
+				change = -EINVAL;
 				goto __error;
 			}
 			for (j = 0; j < 5; j++)
