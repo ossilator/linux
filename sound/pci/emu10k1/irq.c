@@ -23,6 +23,14 @@ irqreturn_t snd_emu10k1_interrupt(int irq, void *dev_id)
 				 "Suspected sound card removal\n");
 			break;
 		}
+		if ((status & IPR_CHANNELLOOP) && emu->das_mode &&
+		    (snd_emu10k1_ptr_read(emu, A_DICE, 0) & A_DICE_COUNTER_MASK)) {
+			// If another IRQ "punched through" the delay,
+			// we mask away the delayed IRQ.
+			status &= ~(IPR_CHANNELLOOP | IPR_CHANNELNUMBERMASK);
+			if (!status)  // Will usually happen in 2nd iteration
+				break;
+		}
 		if (++timeout == 1000) {
 			dev_info(emu->card->dev, "emu10k1 irq routine failure\n");
 			break;
