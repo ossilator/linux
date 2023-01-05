@@ -159,6 +159,8 @@ static int snd_emu10k1_init(struct snd_emu10k1 *emu, int enable_ir)
 		/* disable channel interrupt */
 		CLIEL, 0,
 		CLIEH, 0,
+		HLIEL, 0,
+		HLIEH, 0,
 
 		/* disable stop on loop end */
 		SOLEL, 0,
@@ -172,6 +174,12 @@ static int snd_emu10k1_init(struct snd_emu10k1 *emu, int enable_ir)
 		/* enable rear left + rear right AC97 slots */
 		snd_emu10k1_ptr_write(emu, AC97SLOT, 0, AC97SLOT_REAR_RIGHT |
 				      AC97SLOT_REAR_LEFT);
+	}
+
+	if (emu->das_mode) {
+		// Enable delayed period interrupts
+		snd_emu10k1_ptr_write(emu, A_DICE, 0, 64 - 3 + 1);
+		snd_emu10k1_ptr_write(emu, A_DICE, 1, IPR_CHANNELLOOP);
 	}
 
 	/* init envelope engine */
@@ -414,6 +422,12 @@ int snd_emu10k1_done(struct snd_emu10k1 *emu)
 	else
 		snd_emu10k1_ptr_write(emu, DBG, 0, EMU10K1_DBG_SINGLE_STEP);
 
+	if (emu->das_mode) {
+		// Disable delayed period interrupts
+		snd_emu10k1_ptr_write(emu, A_DICE, 0, 0);
+		snd_emu10k1_ptr_write(emu, A_DICE, 1, 0);
+	}
+
 	snd_emu10k1_ptr_write_multiple(emu, 0,
 		/* reset recording buffers */
 		MICBS, 0,
@@ -429,6 +443,8 @@ int snd_emu10k1_done(struct snd_emu10k1 *emu)
 		/* disable channel interrupt */
 		CLIEL, 0,
 		CLIEH, 0,
+		HLIEL, 0,
+		HLIEH, 0,
 		SOLEL, 0,
 		SOLEH, 0,
 
