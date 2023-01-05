@@ -838,7 +838,18 @@ SUB_REG(FXIDX, IDX,		0x0000ffff)
 #define A_SPRA			0x6b		/* S/PDIF Host Record Address			*/
 #define A_SPRC			0x6c		/* S/PDIF Host Record Control			*/
 
+// NOTE: 64-bit
+// Voice 0 holds the counter, while voice 1 holds the enable bits.
+// Bits in IPR are set according to incoming IRQs as usual.
+// When a corresponding bit is set in the delay enable register,
+// the counter starts, and the IRQ isn't delivered until timeout.
+// Additional delayed IRQs arriving during the countdown do not
+// retrigger it, so they will be delayed less or not at all.
+// Non-delayed IRQs arriving during the countdown are delivered
+// immediately, while the countdown continues.
 #define A_DICE			0x6d		/* Delayed Interrupt Counter & Enable		*/
+#define A_DICE_DELAY_MASK	0x000003ff	/* Interrupt delay minus 1			*/
+#define A_DICE_COUNTER_MASK	0x03ff0000	/* Counter's current value			*/
 
 #define A_TTB			0x6e		/* Tank Table Base				*/
 #define A_TDOF			0x6f		/* Tank Delay Offset				*/

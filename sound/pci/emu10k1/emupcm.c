@@ -96,7 +96,9 @@ static int snd_emu10k1_pcm_channel_alloc(struct snd_emu10k1_pcm *epcm,
 	if (err < 0)
 		return err;
 
-	if (epcm->extra == NULL) {
+	if (epcm->emu->das_mode) {
+		epcm->voices[0]->interrupt = snd_emu10k1_pcm_interrupt;
+	} else if (epcm->extra == NULL) {
 		// The hardware supports only (half-)loop interrupts, so to support an
 		// arbitrary number of periods per buffer, we use an extra voice with a
 		// period-sized loop as the interrupt source. Additionally, the interrupt
@@ -500,12 +502,7 @@ static int snd_emu10k1_efx_playback_prepare(struct snd_pcm_substream *substream)
 	epcm->pitch_target = PITCH_48000;
 
 	start_addr = epcm->start_addr >> 1;  // 16-bit voices
-
-	extra_size = runtime->period_size >> shift;
 	channel_size = runtime->buffer_size >> shift;
-
-	snd_emu10k1_pcm_init_extra_voice(emu, epcm->extra, true,
-					 start_addr, start_addr + extra_size);
 
 	if (das_mode) {
 		unsigned count = 1 << shift;
@@ -520,6 +517,10 @@ static int snd_emu10k1_efx_playback_prepare(struct snd_pcm_substream *substream)
 			}
 		}
 	} else {
+		extra_size = runtime->period_size >> shift;
+		snd_emu10k1_pcm_init_extra_voice(emu, epcm->extra, true,
+						 start_addr, start_addr + extra_size);
+
 		epcm->ccca_start_addr = start_addr;
 		for (i = 0; i < runtime->channels; i++) {
 			snd_emu10k1_pcm_init_voices(emu, epcm->voices[i], true, false,
@@ -547,7 +548,7 @@ static const struct snd_pcm_hardware snd_emu10k1_efx_playback =
 	.buffer_bytes_max =	(128*1024),
 	.period_bytes_max =	(128*1024),
 	.periods_min =		2,
-	.periods_max =		1024,
+	.periods_max =		2,
 	.fifo_size =		0,
 };
 
@@ -698,8 +699,16 @@ static void snd_emu10k1_playback_prepare_voices(struct snd_emu10k1 *emu,
 	// This is why all other (open) drivers for these chips use timer-based
 	// interrupts.
 	//
-	eloop_start += (epcm->resume_pos + eloop_size - 3) % eloop_size;
-	snd_emu10k1_ptr_write(emu, CCCA_CURRADDR, epcm->extra->number, eloop_start);
+	// But then, Audigy introduced delayed interrupt functionality, so we
+	// use it in D.A.S. mode, where we may need all voices. We can't use
+	// it in regular mode due to supporting multiple substreams, which the
+	// delayed IRQs cannot really handle; also, we prefer supporting an
+	// arbitrary number of periods there, for which we need the extra voice.
+	//
+	if (!emu->das_mode) {
+		eloop_start += (epcm->resume_pos + eloop_size - 3) % eloop_size;
+		snd_emu10k1_ptr_write(emu, CCCA_CURRADDR, epcm->extra->number, eloop_start);
+	}
 
 	// It takes a moment until the cache fills complete,
 	// but the unmuting takes long enough for that.
@@ -793,13 +802,25 @@ static void snd_emu10k1_playback_set_running(struct snd_emu10k1 *emu,
 					     struct snd_emu10k1_pcm *epcm)
 {
 	epcm->running = 1;
-	snd_emu10k1_voice_intr_enable(emu, epcm->extra->number);
+	if (emu->das_mode) {
+		unsigned int voice = epcm->voices[0]->number;
+		snd_emu10k1_voice_half_loop_intr_enable(emu, voice);
+		snd_emu10k1_voice_intr_enable(emu, voice);
+	} else {
+		snd_emu10k1_voice_intr_enable(emu, epcm->extra->number);
+	}
 }
 
 static void snd_emu10k1_playback_set_stopped(struct snd_emu10k1 *emu,
 					      struct snd_emu10k1_pcm *epcm)
 {
-	snd_emu10k1_voice_intr_disable(emu, epcm->extra->number);
+	if (emu->das_mode) {
+		unsigned int voice = epcm->voices[0]->number;
+		snd_emu10k1_voice_half_loop_intr_disable(emu, voice);
+		snd_emu10k1_voice_intr_disable(emu, voice);
+	} else {
+		snd_emu10k1_voice_intr_disable(emu, epcm->extra->number);
+	}
 	epcm->running = 0;
 }
 
@@ -1064,7 +1085,8 @@ static int snd_emu10k1_efx_playback_trigger(struct snd_pcm_substream *substream,
 			result = snd_emu10k1_voice_clear_loop_stop_multiple_atomic(emu, mask);
 			if (result == 0) {
 				// The extra voice is allowed to lag a bit
-				snd_emu10k1_playback_trigger_voice(emu, epcm->extra);
+				if (!emu->das_mode)
+					snd_emu10k1_playback_trigger_voice(emu, epcm->extra);
 				goto leave;
 			}
 
@@ -1080,7 +1102,8 @@ static int snd_emu10k1_efx_playback_trigger(struct snd_pcm_substream *substream,
 	case SNDRV_PCM_TRIGGER_SUSPEND:
 	case SNDRV_PCM_TRIGGER_STOP:
 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
-		snd_emu10k1_playback_stop_voice(emu, epcm->extra);
+		if (!emu->das_mode)
+			snd_emu10k1_playback_stop_voice(emu, epcm->extra);
 		snd_emu10k1_efx_playback_stop_voices(
 				emu, epcm, das_mode, count, runtime->channels);
 
@@ -1412,7 +1435,7 @@ static int snd_emu10k1_efx_playback_open(struct snd_pcm_substream *substream)
 					SNDRV_PCM_INFO_RESUME |
 					SNDRV_PCM_INFO_PAUSE;
 				if (shift == 2)
-					runtime->hw.channels_max = 7;  // FIXME: should be 8, but extra voice ...
+					runtime->hw.channels_max = 8;
 				err = snd_pcm_hw_constraint_step(
 						runtime, 0, SNDRV_PCM_HW_PARAM_PERIOD_SIZE, 1 << shift);
 				if (err < 0) {
@@ -1421,6 +1444,7 @@ static int snd_emu10k1_efx_playback_open(struct snd_pcm_substream *substream)
 				}
 			}
 			runtime->hw.formats = SNDRV_PCM_FMTBIT_S32_LE;
+			runtime->hw.periods_max = 2;  // Not using an extra voice
 		}
 	}
 	err = snd_emu10k1_playback_set_constraints(emu, runtime);
