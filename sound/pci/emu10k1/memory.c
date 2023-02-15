@@ -332,10 +332,12 @@ snd_emu10k1_alloc_pages(struct snd_emu10k1 *emu, struct snd_pcm_substream *subst
 			addr = emu->silent_page.addr;
 		else
 			addr = snd_pcm_sgbuf_get_addr(substream, ofs);
+		// isn't that more like BUG_ON()?
 		if (! is_valid_page(emu, addr)) {
 			dev_err_ratelimited(emu->card->dev,
 				"emu: failure page = %d\n", idx);
 			mutex_unlock(&hdr->block_mutex);
+			// blk leaked?
 			return NULL;
 		}
 		emu->page_addr_table[page] = addr;
@@ -418,6 +420,7 @@ snd_emu10k1_synth_alloc(struct snd_emu10k1 *hw, unsigned int size)
 		mutex_unlock(&hdr->block_mutex);
 		return NULL;
 	}
+	// why isn't this error-checked?
 	snd_emu10k1_memblk_map(hw, blk);
 	mutex_unlock(&hdr->block_mutex);
 	return (struct snd_util_memblk *)blk;
@@ -519,6 +522,7 @@ static int synth_alloc_pages(struct snd_emu10k1 *emu, struct snd_emu10k1_memblk 
 		if (snd_emu10k1_alloc_pages_maybe_wider(emu, PAGE_SIZE,
 							&dmab) < 0)
 			goto __fail;
+		// BUG_ON?
 		if (!is_valid_page(emu, dmab.addr)) {
 			snd_dma_free_pages(&dmab);
 			goto __fail;

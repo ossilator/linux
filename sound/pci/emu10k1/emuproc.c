@@ -197,6 +197,8 @@ static void snd_emu10k1_proc_spdif_read(struct snd_info_entry *entry,
 			snd_iprintf(buffer, "BNC rate: %dHz\n",
 				    snd_emu1010_get_raw_rate(emu, EMU_HANA_WCLOCK_SYNC_BNC));
 
+		// FIXME: we could control these two settings for TX.
+		// "IEC958 Playback Default", for iecset
 		snd_emu1010_fpga_read(emu, EMU_HANA_SPDIF_MODE, &value);
 		if (value & EMU_HANA_SPDIF_MODE_RX_INVALID)
 			snd_iprintf(buffer, "\nS/PDIF input invalid\n");
