@@ -1662,7 +1662,7 @@ static int snd_emu1010_clock_fallback_put(struct snd_kcontrol *kcontrol,
 static const struct snd_kcontrol_new snd_emu1010_clock_fallback =
 {
 	.access = SNDRV_CTL_ELEM_ACCESS_READWRITE,
-	.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+	.iface = SNDRV_CTL_ELEM_IFACE_MIXER,  // potentially, CARD would make more sense
 	.name = "Clock Fallback",
 	.count = 1,
 	.info = snd_emu1010_clock_fallback_info,
@@ -1778,7 +1778,7 @@ static int snd_emu1010_optical_out_put(struct snd_kcontrol *kcontrol,
 
 static const struct snd_kcontrol_new snd_emu1010_optical_out = {
 	.access =	SNDRV_CTL_ELEM_ACCESS_READWRITE,
-	.iface =        SNDRV_CTL_ELEM_IFACE_MIXER,
+	.iface =        SNDRV_CTL_ELEM_IFACE_MIXER,  // potentially, CARD would make more sense
 	.name =         "Optical Output Mode",
 	.count =	1,
 	.info =         snd_emu1010_optical_out_info,

@@ -784,6 +784,7 @@ int snd_p16v_mixer(struct snd_emu10k1 *emu)
 
 #ifdef CONFIG_PM_SLEEP
 
+// huuuuuh?!
 #define NUM_CHS	1	/* up to 4, but only first channel is used */
 
 int snd_p16v_alloc_pm_buffer(struct snd_emu10k1 *emu)

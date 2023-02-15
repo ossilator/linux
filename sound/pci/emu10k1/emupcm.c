@@ -306,6 +306,9 @@ static void snd_emu10k1_pcm_init_voice(struct snd_emu10k1 *emu,
 		CCCA, emu10k1_select_interprom(evoice->epcm->pitch_target) |
 		      (w_16 ? 0 : CCCA_8BITSELECT),
 		// Clear filter delay memory
+		// pointless? a new sample is fetched from the cache and progresses through
+		// the filter at each word clock cycle even if the current pitch is zero.
+		// maybe if the voice is started really quickly after this?
 		Z1, 0,
 		Z2, 0,
 		// Invalidate maps
@@ -2142,6 +2145,7 @@ int snd_emu10k1_pcm_efx(struct snd_emu10k1 *emu, int device)
 			emu->efx_voices_mask[0] = 0xffff0000;
 			emu->efx_voices_mask[1] = 0;
 		}
+		// TODO: this should be locked while the device is open
 		kctl = snd_ctl_new1(&snd_emu10k1_pcm_efx_voices_mask, emu);
 		if (!kctl)
 			return -ENOMEM;

@@ -791,6 +791,7 @@ static int snd_emu10k1_verify_controls(struct snd_emu10k1 *emu,
 			goto __error;
 		}
 		if (snd_emu10k1_look_for_ctl(emu, &gctl->id))
+			// why isn't this -EEXIST?
 			continue;
 		gctl_id = (struct snd_ctl_elem_id *)&gctl->id;
 		if (snd_ctl_find_id(emu->card, gctl_id)) {

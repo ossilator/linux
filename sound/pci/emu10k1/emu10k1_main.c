@@ -267,6 +267,7 @@ static int snd_emu10k1_init(struct snd_emu10k1 *emu, int enable_ir)
 
 
 	snd_emu10k1_ptr_write(emu, PTB, 0, emu->ptb_pages.addr);
+	// seems a bit pointless to do that here
 	snd_emu10k1_ptr_write(emu, TCB, 0, 0);	/* taken from original driver */
 	snd_emu10k1_ptr_write(emu, TCBS, 0, TCBS_BUFFSIZE_256K);	/* taken from original driver */
 
@@ -520,7 +521,7 @@ int snd_emu10k1_done(struct snd_emu10k1 *emu)
  * offset problem.  Weird.
  */
 #define EC_RAW_RUN_MODE		(EC_DACMUTEN | EC_ADCRSTN | EC_TRIM_MUTEN | \
-				 EC_TRIM_CSN)
+				 EC_TRIM_CSN) // kx includes EC_AC3_DATA_SELN
 
 
 #define EC_DEFAULT_ADC_GAIN	0xC4C4
