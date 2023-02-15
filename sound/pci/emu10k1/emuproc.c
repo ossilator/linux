@@ -82,8 +82,8 @@ static void snd_emu10k1_proc_read(struct snd_info_entry *entry,
 
 	// The following are internal details in D.A.S. mode,
 	// so there is no use in displaying them to the user.
-	if (emu->das_mode)
-		return;
+//	if (emu->das_mode)
+//		return;
 
 	snd_iprintf(buffer, "\nEffect Send Routing & Amounts:\n");
 	for (idx = 0; idx < NUM_G; idx++) {
@@ -514,6 +514,682 @@ static void snd_emu_proc_emu1010_reg_read(struct snd_info_entry *entry,
 	snd_emu1010_fpga_unlock(emu);
 }
 
+#if SNAP_INPUT
+static void snd_emu_proc_fmt_input(struct snd_emu10k1 *emu, struct snd_info_buffer *buffer, int offset, int nbytes, int s)
+{
+	nbytes += offset;
+	for (int n = offset; n < nbytes;) {
+		snd_iprintf(buffer, "%08x", s);
+		if (emu->snap_stereo) {
+			if (emu->snap_width == 16) {
+				for (int i = 0; i < 4; i++, n += 4, s += 1)
+					snd_iprintf(buffer, "  %04x:%04x",
+						    emu->snap_buffer[n] | (emu->snap_buffer[n + 1] << 8),
+						    emu->snap_buffer[n + 2] | (emu->snap_buffer[n + 3] << 8));
+			} else {
+				for (int i = 0; i < 4; i++, n += 4, s += 2)
+					snd_iprintf(buffer, "  %02x:%02x %02x:%02x",
+						    emu->snap_buffer[n], emu->snap_buffer[n + 1],
+						    emu->snap_buffer[n + 2], emu->snap_buffer[n + 3]);
+			}
+		} else {
+			if (emu->snap_width == 32) {
+				for (int i = 0; i < 4; i++, n += 4, s += 1)
+					snd_iprintf(buffer, "  %08x",
+						    emu->snap_buffer[n] | (emu->snap_buffer[n + 1] << 8) |
+						    (emu->snap_buffer[n + 2] << 16) | (emu->snap_buffer[n + 3] << 24));
+			} else if (emu->snap_width == 16) {
+				for (int i = 0; i < 4; i++, n += 4, s += 2)
+					snd_iprintf(buffer, "  %04x %04x",
+						    emu->snap_buffer[n] | (emu->snap_buffer[n + 1] << 8),
+						    emu->snap_buffer[n + 2] | (emu->snap_buffer[n + 3] << 8));
+			} else {
+				for (int i = 0; i < 4; i++, n += 4, s += 4)
+					snd_iprintf(buffer, "  %02x %02x %02x %02x",
+						    emu->snap_buffer[n], emu->snap_buffer[n + 1],
+						    emu->snap_buffer[n + 2], emu->snap_buffer[n + 3]);
+			}
+		}
+		snd_iprintf(buffer, "\n");
+	}
+}
+#endif
+
+static void snd_emu_proc_snapshot_read(struct snd_info_entry *entry,
+				     struct snd_info_buffer *buffer)
+{
+	struct snd_emu10k1 *emu = entry->private_data;
+
+	if (atomic_xchg(&emu->snapshot_busy, 1)) {
+		snd_iprintf(buffer, "snapshot is locked\n");
+		return;
+	}
+
+#if SNAP_SAMPLES_XADDR || SNAP_SAMPLES_XCACHE || SNAP_SAMPLES_XMISC
+	if (emu->das_mode) {
+		snd_iprintf(buffer, "cannot snapshot extra voice in DAS mode\n");
+		return;
+	}
+#endif
+
+#if SNAP_SETUP
+	snd_iprintf(buffer, "param:  chans=%d  subchans=%d  width=%d\n\n",
+		    emu->snap_raw_chans, emu->snap_sub_chans, emu->snap_width);
+
+	snd_iprintf(buffer, "snapshot'd voices:");
+	for (int c = 0; c < emu->snap_total; c++)
+		snd_iprintf(buffer, " %d", emu->snap_voices[c]);
+	snd_iprintf(buffer, "\n\n");
+#endif
+
+#if SNAP_INIT
+#if SNAP_INIT_VOL
+	snd_iprintf(buffer, "A     B     C     D     E     F     G     H     CVCF\n");
+	for (int c = 0; c < emu->snap_total; c++)
+		snd_iprintf(buffer, "%04x  %04x  %04x  %04x  %04x  %04x  %04x  %04x  %08x\n",
+			    emu->snap_chan[c].csba & 0xffff, emu->snap_chan[c].csba >> 16,
+			    emu->snap_chan[c].cshg & 0xffff, emu->snap_chan[c].cshg >> 16,
+			    emu->snap_chan[c].csfe & 0xffff, emu->snap_chan[c].csfe >> 16,
+			    emu->snap_chan[c].csdc & 0xffff, emu->snap_chan[c].csdc >> 16,
+			    emu->snap_chan[c].cvcf);
+	snd_iprintf(buffer, "\n");
+#endif
+	snd_iprintf(buffer, "CPF       PTRX      PSST      DSL       CCCA      CCR\n");
+	for (int c = 0; c < emu->snap_total; c++) {
+		snd_iprintf(buffer, "%08x  %08x  %08x  %08x  %08x  %08x\n",
+			    emu->snap_chan[c].cpf,
+			    emu->snap_chan[c].ptrx,
+			    emu->snap_chan[c].psst,
+			    emu->snap_chan[c].dsl,
+			    emu->snap_chan[c].ccca,
+			    emu->snap_chan[c].ccr);
+	}
+	snd_iprintf(buffer, "\n");
+#endif
+
+#if SNAP_OTHER
+	snd_iprintf(buffer,
+#if SNAP_OTHER_1
+		"28 29"
+#endif
+		"\n");
+	for (unsigned i = 0; i < ARRAY_SIZE(emu->snap_other); i++) {
+		struct emu_other_snapshot *ss = &emu->snap_other[i];
+#if SNAP_OTHER_1
+		snd_iprintf(buffer, "%02x %02x", ss->fpga_reg_28, ss->fpga_reg_29);
+#endif
+		snd_iprintf(buffer, "\n");
+	}
+	snd_iprintf(buffer, "\n");
+#endif
+
+#define RELATIVE_WC 0
+#define RELATIVE_WC_ERR 1
+
+#if SNAP_IRQ
+	snd_iprintf(buffer,
+#if RELATIVE_WC
+#if RELATIVE_WC_ERR
+		"edWC  "
+#endif
+		"dWC    "
+#else
+		"WC     "
+#endif
+		"CC  IPR       "
+#if SNAP_IRQ_DICE
+		"DICE      "
+#endif
+#if SNAP_IRQ_CLIP
+		"CLIP               "
+#endif
+#if SNAP_IRQ_CLIE
+		"CLIE               "
+#endif
+#if SNAP_IRQ_HLIP
+		"HLIP               "
+#endif
+	);
+	for (int c = 0; c < emu->snap_total; c++)
+		snd_iprintf(buffer, "| RDA "
+#if SNAP_IRQ_CACHE
+				    "CIS pos "
+#endif
+				    " ");
+	snd_iprintf(buffer, "\n");
+#if RELATIVE_WC && RELATIVE_WC_ERR
+	int edwc = 0;
+#endif
+	for (int c = 0; c < emu->num_irq_snaps; c++) {
+		struct emu_irq_snapshot *is = &emu->snap_irq[c];
+		int wc = REG_VAL_GET(WC_SAMPLECOUNTER, is->wc);
+#if RELATIVE_WC
+		int dwc = c ? wc - REG_VAL_GET(WC_SAMPLECOUNTER, is[-1].wc) : 0;
+		if (dwc < 0)
+			dwc += 1 << REG_SIZE(WC_SAMPLECOUNTER);
+#if RELATIVE_WC_ERR
+		if (c)
+			edwc += dwc - emu->snap_period;
+		snd_iprintf(buffer, "%4d  %05x  ", edwc, dwc);
+#else
+		snd_iprintf(buffer, "%05x  ", dwc);
+#endif
+#else
+		snd_iprintf(buffer, "%05x  ", wc);
+#endif
+		snd_iprintf(buffer, "%02x  %08x  ",
+			    REG_VAL_GET(WC_CURRENTCHANNEL, is->wc),
+			    is->ipr);
+#if SNAP_IRQ_DICE
+		snd_iprintf(buffer, "%08x  ", is->dice);
+#endif
+#if SNAP_IRQ_CLIP
+		snd_iprintf(buffer, "%08x:%08x  ", is->cliph, is->clipl);
+#endif
+#if SNAP_IRQ_CLIE
+		snd_iprintf(buffer, "%08x:%08x  ", is->clieh, is->cliel);
+#endif
+#if SNAP_IRQ_HLIP
+		snd_iprintf(buffer, "%08x:%08x  ", is->hliph, is->hlipl);
+#endif
+		for (int c = 0; c < emu->snap_total; c++)
+			snd_iprintf(buffer, "| %04x ",
+				    REG_VAL_GET(CCCA_CURRADDR, is->ccca[c]));
+#if SNAP_IRQ_CACHE
+			snd_iprintf(buffer, "%02x %04x ",
+				    REG_VAL_GET(CCR_CACHEINVALIDSIZE, is->ccr[c]),
+				    REG_VAL_GET(CCCA_CURRADDR, is->ccca[c]) -
+					REG_VAL_GET(CCR_CACHEINVALIDSIZE, is->ccr[c]));
+#endif
+		snd_iprintf(buffer, "\n");
+	}
+	snd_iprintf(buffer, "\n");
+#endif
+
+#if SNAP_INTERPOLATOR
+	snd_iprintf(buffer, "R  S  WC     CC  Z1 << 5    Z1 << 5    sample\n");
+	for (int c = 0; c < emu->num_inter_snaps; c++) {
+		int z1 = emu->snap_inter[c].z1 << 5;
+		int z2 = emu->snap_inter[c].z2 << 5;
+		int fx = emu->snap_inter[c].fx;
+		char sz1 = ' ', sz2 = ' ', sfx = ' ';
+		if (z1 < 0)
+			z1 = -z1, sz1 = '-';
+		if (z2 < 0)
+			z2 = -z2, sz2 = '-';
+		if (fx < 0)
+			fx = -fx, sfx = '-';
+		//snd_iprintf(buffer, "%d  %d  %05x  %02x  %c%08x  %c%08x  %c%08x\n",
+		//	    emu->snap_inter[c].r,
+		//	    emu->snap_inter[c].s,
+		//	    REG_VAL_GET(WC_SAMPLECOUNTER, emu->snap_inter[c].wc),
+		//	    REG_VAL_GET(WC_CURRENTCHANNEL, emu->snap_inter[c].wc),
+		//	    sz1, z1,
+		//	    sz2, z2,
+		//	    sfx, fx);
+		int wz1 = z1 >> 24;
+		int wz2 = z2 >> 24;
+		int wfx = fx >> 24;
+		int dz1 = ((z1 & 0xffffff) * 1000LL) >> 24;
+		int dz2 = ((z2 & 0xffffff) * 1000LL) >> 24;
+		int dfx = ((fx & 0xffffff) * 1000LL) >> 24;
+		snd_iprintf(buffer, "%d  %d  %05x  %02x  %c% 3d.%03d  %c% 3d.%03d  %c% 3d.%03d\n",
+			    emu->snap_inter[c].r,
+			    emu->snap_inter[c].s,
+			    REG_VAL_GET(WC_SAMPLECOUNTER, emu->snap_inter[c].wc),
+			    REG_VAL_GET(WC_CURRENTCHANNEL, emu->snap_inter[c].wc),
+			    sz1, wz1, dz1,
+			    sz2, wz2, dz2,
+			    sfx, wfx, dfx);
+	}
+	snd_iprintf(buffer, "\n");
+#endif
+
+#if SNAP_REGS
+#if 0
+	snd_iprintf(buffer, "wallclk CC ");
+	for (int c = 0; c < emu->snap_total; c++) {
+		snd_iprintf(buffer, "| "
+#if SNAP_REGS_AMOUNT
+			"CS        "
+#endif
+#if SNAP_REGS_FILTER
+			"Z1        Z2        "
+#endif
+			"PTRX      CP        CA        "
+			//"FA        "
+			"CRA CIS ");
+	}
+	snd_iprintf(buffer, "| ID\n");
+	for (int n = 0; n < emu->num_reg_snaps; n++) {
+		struct emu_reg_snapshot *rs = &emu->snap_regs[n];
+		snd_iprintf(buffer, "%05x   %02x ",
+			    REG_VAL_GET(WC_SAMPLECOUNTER, rs->wc),
+			    REG_VAL_GET(WC_CURRENTCHANNEL, rs->wc));
+		for (int c = 0; c < emu->snap_total; c++) {
+			snd_iprintf(buffer, "| ");
+			if (c == rs->voice || rs->voice == -1) {
+#if SNAP_REGS_AMOUNT
+				snd_iprintf(buffer, "%08x  ", rs->csba[c]);
+#endif
+#if SNAP_REGS_FILTER
+				snd_iprintf(buffer, "%08x  %08x  ", rs->z1[c] << 5, rs->z2[c] << 5);
+#endif
+				snd_iprintf(buffer, "%08x  %08x  %08x  ",
+					    rs->ptrx[c], rs->cpf[c],
+					    REG_VAL_GET(CCCA_CURRADDR, rs->ccca[c]));
+				//snd_iprintf(buffer, "%08x  ", rs->cpf[c] & CPF_FRACADDRESS_MASK);
+				snd_iprintf(buffer, "%02x  %02x  ",
+					    REG_VAL_GET(CCR_READADDRESS, rs->ccr[c]),
+					    REG_VAL_GET(CCR_CACHEINVALIDSIZE, rs->ccr[c]));
+			} else {
+				snd_iprintf(buffer,
+#if SNAP_REGS_AMOUNT
+					"          "
+#endif
+#if SNAP_REGS_FILTER
+					"                    "
+#endif
+					"                              "
+					//"          "
+					"        ");
+			}
+		}
+		snd_iprintf(buffer, "| %s\n", rs->lbl);
+	}
+#else
+	snd_iprintf(buffer, "wallclk CC V  "
+#if SNAP_REGS_AMOUNT
+		"CS        "
+#endif
+#if SNAP_REGS_FILTER
+		"Z1        Z2        "
+#endif
+		"PTRX      CP        CA        "
+		//"FA        "
+		"CLA     CRA CIS LIS CLF LF ID\n");
+	for (int n = 0; n < emu->num_reg_snaps; n++) {
+		struct emu_reg_snapshot *rs = &emu->snap_regs[n];
+		if (rs->lbl)
+			snd_iprintf(buffer, "%05x   %02x ",
+				    REG_VAL_GET(WC_SAMPLECOUNTER, rs->wc),
+				    REG_VAL_GET(WC_CURRENTCHANNEL, rs->wc));
+		else
+			snd_iprintf(buffer, "           ");
+		snd_iprintf(buffer, "%2d ", rs->voice);
+#if SNAP_REGS_AMOUNT
+		snd_iprintf(buffer, "%08x  ", rs->csba);
+#endif
+#if SNAP_REGS_FILTER
+		snd_iprintf(buffer, "%08x  %08x  ", rs->z1 << 5, rs->z2 << 5);
+#endif
+		snd_iprintf(buffer, "%08x  %08x  %08x  ",
+			    rs->ptrx, rs->cpf,
+			    REG_VAL_GET(CCCA_CURRADDR, rs->ccca));
+		//snd_iprintf(buffer, "%08x  ", rs->cpf & CPF_FRACADDRESS_MASK);
+		snd_iprintf(buffer, "%06x  %02x  %02x  %02x  %c   %c  ",
+			    (REG_VAL_GET(CCR_CACHELOOPADDRHI, rs->ccr) << 16) |
+				    REG_VAL_GET(CLP_CACHELOOPADDR, rs->clp),
+			    REG_VAL_GET(CCR_READADDRESS, rs->ccr),
+			    REG_VAL_GET(CCR_CACHEINVALIDSIZE, rs->ccr),
+			    REG_VAL_GET(CCR_LOOPINVALSIZE, rs->ccr),
+			    rs->ccr & CCR_CACHELOOPFLAG ? '1' : '0',
+			    rs->ccr & CCR_LOOPFLAG ? '1' : '0');
+		snd_iprintf(buffer, "%s\n", rs->lbl ? rs->lbl : "");
+	}
+#endif
+	snd_iprintf(buffer, "\n");
+#endif
+
+#if PROC_CTL_CACHE
+	snd_iprintf(buffer, "init:  read_addr=%06x  cache_read_addr=%02x  cache_inval=%02x\n"
+		            "       cache_loop_addr=%06x  cache_loop_inval=%02x  cache_loop_flag=%d  loop_flag=%d\n\n",
+		    emu->init_read_addr, emu->init_cache_read_addr, emu->init_cache_inval,
+		    emu->init_cache_loop_addr, emu->init_cache_loop_inval,
+		    emu->init_cache_loop_flag, emu->init_loop_flag);
+#endif
+#if PROC_CTL_AMOUNTS
+	snd_iprintf(buffer, "init:  send_amount=%02x\n\n", emu->init_send_amount);
+#endif
+#if PROC_CTL_LOOP
+	snd_iprintf(buffer, "init:  loop_start=%#x  loop_end=%#x\n\n",
+		    emu->init_loop_start, emu->init_loop_end);
+#endif
+
+#if SNAP_CACHE
+	snd_iprintf(buffer, "VC  RDA     CLA     CRA CIS LIS CLF LF ILS WSS CD\n");
+	for (int c = 0; c < emu->num_cache_snaps; c++) {
+		struct emu_cache_snapshot *sc = &emu->snap_cache[c];
+		int ils = sc->ccr & CCR_INTERLEAVEDSAMPLES;
+		int wss = sc->ccr & CCR_WORDSIZEDSAMPLES;
+		snd_iprintf(buffer, "%2d  %06x  %06x  %02x  %02x  %02x  %c   %c  %c   %c  ",
+			    sc->voice,
+			    REG_VAL_GET(CCCA_CURRADDR, sc->ccca),
+			    (REG_VAL_GET(CCR_CACHELOOPADDRHI, sc->ccr) << 16) |
+				    REG_VAL_GET(CLP_CACHELOOPADDR, sc->clp),
+			    REG_VAL_GET(CCR_READADDRESS, sc->ccr),
+			    REG_VAL_GET(CCR_CACHEINVALIDSIZE, sc->ccr),
+			    REG_VAL_GET(CCR_LOOPINVALSIZE, sc->ccr),
+			    sc->ccr & CCR_CACHELOOPFLAG ? '1' : '0',
+			    sc->ccr & CCR_LOOPFLAG ? '1' : '0',
+			    ils ? '1' : '0',
+			    wss ? '1' : '0');
+		for (int l = 0; l < 2; l++) {
+			if (l)
+				snd_iprintf(buffer, "                                              ");
+			for (int ci = 0; ci < 16; ci++) {
+				u32 w = sc->cd[l * 16 + ci];
+				if (wss && ils)
+					snd_iprintf(buffer, " %08x", w);
+				else if (wss || ils)
+					snd_iprintf(buffer, "  %04x %04x", w & 0xffff, w >> 16);
+				else
+					snd_iprintf(buffer, "  %02x %02x %02x %02x",
+						    w & 0xff, (w >> 8) & 0xff,
+						    (w >> 16) & 0xff, w >> 24);
+			}
+			snd_iprintf(buffer, "\n");
+		}
+	}
+	snd_iprintf(buffer, "\n");
+#endif
+
+#if SNAP_SAMPLES
+	snd_iprintf(buffer,
+#if SNAP_SAMPLES_TIME
+		"dWallclk "
+#endif
+#if SNAP_SAMPLES_WC
+		"wordclk CC  "
+#endif
+#if SNAP_SAMPLES_VALUES
+		"sample     "
+#endif
+#if SNAP_SAMPLES_ADDR || SNAP_SAMPLES_XADDR
+		"RDA      "
+#endif
+#if SNAP_SAMPLES_CACHE || SNAP_SAMPLES_XCACHE
+		"CRA  CIS  "
+		"CLF LF  LIS  "
+#if SNAP_SAMPLES_CACHE_CLP
+		"CLA     "
+#endif
+#endif
+#if SNAP_SAMPLES_FILTER
+#  if SNAP_INIT && SNAP_INIT_VOL
+		"Z1/i  Z2/i  "
+#  endif
+		"Z1 << 5   Z2 << 5  "
+#endif
+#if SNAP_SAMPLES_MISC || SNAP_SAMPLES_XMISC
+		"0x0e      0x0f      0x1f      0x57      0x7f"
+#endif
+		"\n");
+#if SNAP_SAMPLES_FILTER && SNAP_INIT && SNAP_INIT_VOL
+	u32 cx = emu->snap_width == 16 ? 0 : 0x80;
+#endif
+	for (int n = 0; n < emu->num_sample_snaps; n++) {
+		struct emu_sample_snapshot *ss = &emu->snapshots[n];
+#if SNAP_SAMPLES_WC
+		int wc = REG_VAL_GET(WC_SAMPLECOUNTER, ss->wc);
+		char wid = ' ';
+		if (n) {
+			int prev_wc = REG_VAL_GET(WC_SAMPLECOUNTER, ss[-1].wc);
+			if (wc == prev_wc + 1) {
+				wid = '*';
+				if (emu->snap_chans > 1)
+					snd_iprintf(buffer, "\n");
+			} else if (wc != prev_wc)
+				snd_iprintf(buffer, "----\n");
+			else if (emu->snap_chans > 1)
+				snd_iprintf(buffer, "\n");
+		}
+#endif
+#if SNAP_SAMPLES_TIME
+		snd_iprintf(buffer, "%7ld  ", n ? ss->ts.tv_nsec - ss[-1].ts.tv_nsec : 0);
+#endif
+#if SNAP_SAMPLES_WC
+		snd_iprintf(buffer, "%05x%c  %02x  ",
+			    wc, wid, REG_VAL_GET(WC_CURRENTCHANNEL, ss->wc));
+#endif
+#if SNAP_SAMPLES_XADDR || SNAP_SAMPLES_XCACHE || SNAP_SAMPLES_XMISC
+#if SNAP_SAMPLES_XADDR
+		int xca = REG_VAL_GET(CCCA_CURRADDR, ss->xccca);
+		char xcaid = ' ';
+#endif
+#if SNAP_SAMPLES_XCACHE
+		int xcra = REG_VAL_GET(CCR_READADDRESS, ss->xccr);
+		int xcis = REG_VAL_GET(CCR_CACHEINVALIDSIZE, ss->xccr);
+		char xcraid = ' ', xcisid = ' ';
+#endif
+		if (n) {
+#if SNAP_SAMPLES_XADDR
+			int prev_xca = REG_VAL_GET(CCCA_CURRADDR, ss[-1].xccca);
+			if (xca != prev_xca)
+				xcaid = '*';
+#endif
+#if SNAP_SAMPLES_XCACHE
+			int prev_xcra = REG_VAL_GET(CCR_READADDRESS, ss[-1].xccr);
+			int prev_xcis = REG_VAL_GET(CCR_CACHEINVALIDSIZE, ss[-1].xccr);
+			if (xcra != prev_xcra)
+				xcraid = '*';
+			if (xcis != prev_xcis)
+				xcisid = '*';
+#endif
+		}
+#if SNAP_SAMPLES_VALUES
+		snd_iprintf(buffer, "           ");
+#endif
+#if SNAP_SAMPLES_XADDR
+		snd_iprintf(buffer, "%06x%c  ", xca, xcaid);
+#endif
+#if SNAP_SAMPLES_XCACHE
+		snd_iprintf(buffer, "%02x%c  %02x%c  ", xcra, xcraid, xcis, xcisid);
+#endif
+#if SNAP_SAMPLES_XMISC
+		snd_iprintf(buffer, "%08x  %08x  %08x  %08x  %08x",
+			    ss->xreg0e, ss->xreg0f, ss->xreg1f, ss->xreg57, ss->xreg7f);
+#endif
+		snd_iprintf(buffer, "\n");
+#endif
+#if SNAP_SAMPLES_VALUES || SNAP_SAMPLES_ADDR || SNAP_SAMPLES_CACHE || SNAP_SAMPLES_FILTER
+		for (int c = 0; c < emu->snap_chans; c++) {
+#if SNAP_SAMPLES_VALUES
+			int sam = ss->fxbus[c];
+			char samid = ' ';
+#endif
+#if SNAP_SAMPLES_ADDR
+			int ca = REG_VAL_GET(CCCA_CURRADDR, ss->ccca[c]);
+			char caid = ' ';
+#endif
+#if SNAP_SAMPLES_CACHE
+			int cra = REG_VAL_GET(CCR_READADDRESS, ss->ccr[c]);
+			int cis = REG_VAL_GET(CCR_CACHEINVALIDSIZE, ss->ccr[c]);
+			char craid = ' ', cisid = ' ';
+			int clf = !!(ss->ccr[c] & CCR_CACHELOOPFLAG);
+			int lf = !!(ss->ccr[c] & CCR_LOOPFLAG);
+			int lis = REG_VAL_GET(CCR_LOOPINVALSIZE, ss->ccr[c]);
+			char clfid = ' ', lfid = ' ', lisid = ' ';
+#if SNAP_SAMPLES_CACHE_CLP
+			int cla = (REG_VAL_GET(CCR_CACHELOOPADDRHI, ss->ccr[c]) << 16) |
+					REG_VAL_GET(CLP_CACHELOOPADDR, ss->clp[c]);
+			char claid = ' ';
+#endif
+#endif
+#if SNAP_SAMPLES_FILTER && SNAP_INIT && SNAP_INIT_VOL
+			u32 cv = max(emu->snap_chan[c].cvcf >> 16, 1U);
+			u32 cm = 0xffff;
+			if (cx) cv *= 256, cm = 0xff;
+#endif
+			if (n) {
+#if SNAP_SAMPLES_VALUES
+				int prev_sam = ss[-1].fxbus[c];
+				if ((unsigned)sam < (unsigned)prev_sam)
+					samid = '^';
+				else if (sam != prev_sam)
+					samid = '*';
+#endif
+#if SNAP_SAMPLES_ADDR
+				int prev_ca = REG_VAL_GET(CCCA_CURRADDR, ss[-1].ccca[c]);
+				if (ca < prev_ca)
+					caid = '^';
+				else if (ca != prev_ca)
+					caid = '*';
+#endif
+#if SNAP_SAMPLES_CACHE
+				int prev_cra = REG_VAL_GET(CCR_READADDRESS, ss[-1].ccr[c]);
+				int prev_cis = REG_VAL_GET(CCR_CACHEINVALIDSIZE, ss[-1].ccr[c]);
+				if (cra != prev_cra)
+					craid = '*';
+				if (cis != prev_cis)
+					cisid = '*';
+				int prev_clf = !!(ss[-1].ccr[c] & CCR_CACHELOOPFLAG);
+				int prev_lf = !!(ss[-1].ccr[c] & CCR_LOOPFLAG);
+				int prev_lis = REG_VAL_GET(CCR_LOOPINVALSIZE, ss[-1].ccr[c]);
+				if (clf != prev_clf)
+					clfid = '*';
+				if (lf != prev_lf)
+					lfid = '*';
+				if (lis != prev_lis)
+					lisid = '*';
+#if SNAP_SAMPLES_CACHE_CLP
+				int prev_cla = (REG_VAL_GET(CCR_CACHELOOPADDRHI, ss[-1].ccr[c]) << 16) |
+						REG_VAL_GET(CLP_CACHELOOPADDR, ss[-1].clp[c]);
+				if (cla != prev_cla)
+					claid = '*';
+#endif
+#endif
+			}
+			if (c) {
+#if SNAP_SAMPLES_TIME
+				snd_iprintf(buffer, "         ");
+#endif
+#if SNAP_SAMPLES_WC
+				snd_iprintf(buffer, "          ");
+#endif
+			}
+#if SNAP_SAMPLES_VALUES
+			snd_iprintf(buffer, "%08x%c  ", sam, samid);
+#endif
+#if SNAP_SAMPLES_ADDR
+			snd_iprintf(buffer, "%06x%c  ", ca, caid);
+#elif SNAP_SAMPLES_XADDR
+			snd_iprintf(buffer, "         ");
+#endif
+#if SNAP_SAMPLES_CACHE
+			snd_iprintf(buffer, "%02x%c  %02x%c  ", cra, craid, cis, cisid);
+			snd_iprintf(buffer, "%d%c  %d%c  %02x%c  ",
+				    clf, clfid, lf, lfid, lis, lisid);
+#if SNAP_SAMPLES_CACHE_CLP
+			snd_iprintf(buffer, "%06x%c  ", cla, claid);
+#endif
+#elif SNAP_SAMPLES_XCACHE
+			snd_iprintf(buffer, "          ");
+#endif
+#if SNAP_SAMPLES_FILTER
+#  if SNAP_INIT && SNAP_INIT_VOL
+			snd_iprintf(buffer, "%04x  %04x  ",
+				    (ss->z1[c] * 16 / cv ^ cx) & cm, (ss->z2[c] * 16 / cv ^ cx) & cm);
+#  endif
+			snd_iprintf(buffer, "%08x  %08x  ",
+				    ss->z1[c] << 5, ss->z2[c] << 5);
+#endif
+#if SNAP_SAMPLES_MISC
+			snd_iprintf(buffer, "%08x  %08x  %08x  %08x  %08x\n",
+				    ss->reg0e[c], ss->reg0f[c], ss->reg1f[c], ss->reg57[c], ss->reg7f[c]);
+#endif
+			snd_iprintf(buffer, "\n");
+		}
+#endif
+	}
+	snd_iprintf(buffer, "\n");
+#endif
+
+#if SNAP_INPUT
+//	snd_iprintf(buffer, "avail_max = 0x%lx  dma_bytes = 0x%lx\n"
+//			    "hw_ptr_base = 0x%lx  hw_ptr_interrup = 0x%lx  hw_ptr_wrap = 0x%llx\n\n",
+//			    emu->snap_avail_max, emu->snap_dma_bytes,
+//			    emu->snap_hw_ptr_base, emu->snap_hw_ptr_interrupt, emu->snap_hw_ptr_wrap);
+
+	if (emu->snap_buffer) {
+		int ssft = (emu->snap_width == 32) + (emu->snap_width >= 16) + emu->snap_stereo;
+		if (emu->snap_il) {
+			snd_emu_proc_fmt_input(emu, buffer, 0, emu->snap_dma_bytes, emu->snap_start >> ssft);
+		} else {
+			int o = 0;
+			int s = emu->snap_start;
+			int n = emu->snap_dma_bytes / (emu->snap_raw_chans * emu->snap_sub_chans);
+			for (int c = 0; c < emu->snap_raw_chans; c++) {
+				for (int sc = 0; sc < emu->snap_sub_chans; sc++) {
+					snd_iprintf(buffer, "Channel %d:%d:\n", c, sc);
+					snd_emu_proc_fmt_input(emu, buffer, o, n, s >> ssft);
+					snd_iprintf(buffer, "\n");
+					o += n;
+					s += n;
+				}
+			}
+		}
+	}
+#endif
+
+	atomic_set(&emu->snapshot_busy, 0);
+}
+
+#if PROC_CTL_CACHE || PROC_CTL_AMOUNTS || PROC_CTL_LOOP || SNAP_OTHER
+static void snd_emu_proc_snapshot_write(struct snd_info_entry *entry,
+                                      struct snd_info_buffer *buffer)
+{
+	struct snd_emu10k1 *emu = entry->private_data;
+	char line[64];
+
+	while (!snd_info_get_line(buffer, line, sizeof(line))) {
+#if SNAP_OTHER
+		if (!strcmp(line, "snapshot")) {
+			if (atomic_xchg(&emu->snapshot_busy, 1))
+				continue;
+			snd_emu10k1_snapshot_other(emu);
+			atomic_set(&emu->snapshot_busy, 0);
+			continue;
+		}
+#endif
+#if PROC_CTL_CACHE || PROC_CTL_AMOUNTS || PROC_CTL_LOOP
+		char reg[64];
+		u32 val;
+		if (sscanf(line, "%63s %i", reg, &val) != 2)
+			continue;
+		if (0)
+			{}
+#if PROC_CTL_CACHE
+		else if (!strcmp(reg, "read_addr"))
+			emu->init_read_addr = val;
+		else if (!strcmp(reg, "cache_read_addr"))
+			emu->init_cache_read_addr = val;
+		else if (!strcmp(reg, "cache_inval"))
+			emu->init_cache_inval = val;
+		else if (!strcmp(reg, "cache_loop_addr"))
+			emu->init_cache_loop_addr = val;
+		else if (!strcmp(reg, "cache_loop_inval"))
+			emu->init_cache_loop_inval = val;
+		else if (!strcmp(reg, "cache_loop_flag"))
+			emu->init_cache_loop_flag = val;
+		else if (!strcmp(reg, "loop_flag"))
+			emu->init_loop_flag = val;
+#endif
+#if PROC_CTL_AMOUNTS
+		else if (!strcmp(reg, "send_amount"))
+			emu->init_send_amount = val;
+#endif
+#if PROC_CTL_LOOP
+		else if (!strcmp(reg, "loop_start"))
+			emu->init_loop_start = val;
+		else if (!strcmp(reg, "loop_end"))
+			emu->init_loop_end = val;
+#endif
+#endif
+	}
+}
+#endif
+
 static void snd_emu_proc_io_reg_read(struct snd_info_entry *entry,
 				     struct snd_info_buffer *buffer)
 {
@@ -691,6 +1367,14 @@ int snd_emu10k1_proc_init(struct snd_emu10k1 *emu)
 					     snd_emu_proc_ptr_reg_read20c,
 					     snd_emu_proc_ptr_reg_write20);
 	}
+
+	snd_card_rw_proc_new(emu->card, "snapshot", emu,
+			     snd_emu_proc_snapshot_read,
+#if PROC_CTL_CACHE || PROC_CTL_AMOUNTS || PROC_CTL_LOOP || SNAP_OTHER
+			     snd_emu_proc_snapshot_write);
+#else
+			     NULL);
+#endif
 #endif
 	
 	snd_card_ro_proc_new(emu->card, "emu10k1", emu, snd_emu10k1_proc_read);
