@@ -9,12 +9,109 @@
 #include <sound/core.h>
 #include <sound/emu10k1.h>
 
+#if SNAP_IRQ_HANDLER || LOG_CAP_POS || LOG_PB_POS
+static u32 snap_read(struct snd_emu10k1 *emu, unsigned int reg)
+{
+	return inl(emu->port + reg);
+}
+
+static u32 snap_ptr_read(struct snd_emu10k1 *emu, unsigned int reg, unsigned int chn)
+{
+	outl((reg << 16) | chn, emu->port + PTR);
+	return inl(emu->port + DATA);
+}
+
+#if LOG_CAP_POS || LOG_PB_POS
+static void snap_ptr_write(struct snd_emu10k1 *emu, unsigned int reg, unsigned int chn, u32 val)
+{
+	outl((reg << 16) | chn, emu->port + PTR);
+	outl(val, emu->port + DATA);
+}
+
+static void log_irq_event(struct snd_emu10k1 *emu, int log, int val)
+{
+	snap_ptr_write(emu, A_FXGPREGBASE + emu->fngprs + log, 0,
+		       0x7fffffffLL * val / 100);
+}
+#endif
+#endif
+
 irqreturn_t snd_emu10k1_interrupt(int irq, void *dev_id)
 {
 	struct snd_emu10k1 *emu = dev_id;
 	unsigned int status, orig_status;
 	int handled = 0;
 	int timeout = 0;
+
+#if SNAP_IRQ_HANDLER || LOG_CAP_POS || LOG_PB_POS
+	spin_lock(&emu->emu_lock);
+	do {
+		u32 ipr = snap_read(emu, IPR);
+#if LOG_CAP_POS
+		if (ipr & (IPR_EFXBUFFULL | IPR_EFXBUFHALFFULL))
+			log_irq_event(emu, CapLogReg,
+				  emu->snap_cap_size ?
+				  REG_VAL_GET(FXIDX_IDX, snap_ptr_read(emu, FXIDX, 0))
+				  * 100 / emu->snap_cap_size : -75);
+#endif
+#if !SNAP_IRQ_DICE
+		if (!(ipr & IPR_CHANNELLOOP))
+			break;
+#endif
+#if SNAP_IRQ_HANDLER
+		int nums = emu->num_irq_snaps;
+		if (nums < ARRAY_SIZE(emu->snap_irq)) {
+			u32 wc = snap_read(emu, WC);
+#if SNAP_IRQ_DICE
+			u32 dice = snap_ptr_read(emu, A_DICE, 0);
+#endif
+			struct emu_irq_snapshot *is = &emu->snap_irq[nums];
+			emu->num_irq_snaps = nums + 1;
+			for (int c = 0; c < emu->snap_total; c++) {
+				int cv = emu->snap_voices[c];
+				u32 ccca = snap_ptr_read(emu, CCCA, cv);
+#if SNAP_IRQ_CACHE
+				u32 ccca2, ccr;
+				do {
+					ccca2 = ccca;
+					ccr = snap_ptr_read(emu, CCR, cv);
+					ccca = snap_ptr_read(emu, CCCA, cv);
+				} while (ccca2 != ccca);
+				is->ccr[c] = ccr;
+#endif
+				is->ccca[c] = ccca;
+			}
+#if SNAP_IRQ_CLIP
+			is->clipl = snap_ptr_read(emu, CLIPL, 0);
+			is->cliph = snap_ptr_read(emu, CLIPH, 0);
+#endif
+#if SNAP_IRQ_HLIP
+			is->hlipl = snap_ptr_read(emu, HLIPL, 0);
+			is->hliph = snap_ptr_read(emu, HLIPH, 0);
+#endif
+#if SNAP_IRQ_CLIE
+			is->cliel = snap_ptr_read(emu, CLIEL, 0);
+			is->clieh = snap_ptr_read(emu, CLIEH, 0);
+#endif
+			is->wc = wc;
+			is->ipr = ipr;
+#if SNAP_IRQ_DICE
+			is->dice = dice;
+#endif
+		}
+#endif
+#if LOG_PB_POS
+#if SNAP_IRQ_DICE
+		if (ipr & IPR_CHANNELLOOP)
+#endif
+		log_irq_event(emu, PbLogReg,
+			  emu->snap_pb_size ?
+			  (REG_VAL_GET(CCCA_CURRADDR, snap_ptr_read(emu, CCCA, emu->snap_voices[0])) -
+			  emu->snap_pb_base) * 100 / emu->snap_pb_size : -50);
+#endif
+	} while (0);
+	spin_unlock(&emu->emu_lock);
+#endif
 
 	while ((status = inl(emu->port + IPR)) != 0) {
 		handled = 1;
@@ -152,6 +249,12 @@ irqreturn_t snd_emu10k1_interrupt(int irq, void *dev_id)
 			status &= ~IPR_P16V;
 		}
 		if (status & IPR_A_GPIO) {
+			//u32 gpio, sts, sts2;
+			//gpio = inl(emu->port + A_IOCFG);
+			//snd_emu1010_fpga_read(emu, EMU_HANA_IRQ_STATUS, &sts);
+			//snd_emu1010_fpga_read(emu, EMU_HANA_IRQ_STATUS, &sts2);
+			//dev_info(emu->card->dev, "got gpio int, gpi=0x%04x, sts=%#02x, sts2=%#02x\n", gpio, sts, sts2);
+
 			if (emu->gpio_interrupt)
 				emu->gpio_interrupt(emu);
 			else

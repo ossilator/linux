@@ -731,6 +731,8 @@ int snd_emu10k1_voice_clear_loop_stop_multiple_atomic(struct snd_emu10k1 *emu, u
 				// not nice at all, but necessary for reasonable reliability.
 				udelay(1);
 			}
+			dev_warn(emu->card->dev, "sync start: phase 2 never came!\n");
+			goto boo;
 			break;
 		good:
 			// ... and release the high voices, while the low ones are serviced.
@@ -741,8 +743,10 @@ int snd_emu10k1_voice_clear_loop_stop_multiple_atomic(struct snd_emu10k1 *emu, u
 			    ((REG_VAL_GET(WC_SAMPLECOUNTER, wc) + 1) & REG_MASK0(WC_SAMPLECOUNTER))) {
 				ret = 0;
 			} else {
+				dev_warn(emu->card->dev, "sync start: phase 2 was interfered with!\n");
 				ret = -EAGAIN;
 			}
+			goto boo;
 			break;
 		}
 		// Don't block for too long
@@ -750,7 +754,9 @@ int snd_emu10k1_voice_clear_loop_stop_multiple_atomic(struct snd_emu10k1 *emu, u
 		udelay(1);
 		spin_lock_irqsave(&emu->emu_lock, flags);
 	}
+	dev_warn(emu->card->dev, "sync start: phase 1 never came!\n");
 
+boo:
 	spin_unlock_irqrestore(&emu->emu_lock, flags);
 	return ret;
 }
@@ -797,3 +803,25 @@ void snd_emu10k1_ac97_write(struct snd_ac97 *ac97, unsigned short reg, unsigned 
 	outw(data, emu->port + AC97DATA);
 	spin_unlock_irqrestore(&emu->emu_lock, flags);
 }
+
+#if SNAP_OTHER
+void snd_emu10k1_snapshot_other(struct snd_emu10k1 *emu)
+{
+	unsigned long flags;
+#if SNAP_OTHER_1
+	u32 reg;
+#endif
+
+	for (unsigned i = 0; i < ARRAY_SIZE(emu->snap_other); i++) {
+		struct emu_other_snapshot *ss = &emu->snap_other[i];
+		spin_lock_irqsave(&emu->emu_lock, flags);
+#if SNAP_OTHER_1
+		snd_emu1010_fpga_read_locked(emu, 0x28, &reg);
+		ss->fpga_reg_28 = reg;;
+		snd_emu1010_fpga_read_locked(emu, 0x29, &reg);
+		ss->fpga_reg_29 = reg;;
+#endif
+		spin_unlock_irqrestore(&emu->emu_lock, flags);
+	}
+}
+#endif

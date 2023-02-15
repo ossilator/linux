@@ -1513,6 +1513,211 @@ enum {
 	CAPTURE_EFX
 };
 
+#define PROC_CTL_CACHE 0
+#define PROC_CTL_AMOUNTS 0
+#define PROC_CTL_LOOP 0
+
+#define MANIPULATE_FX 0
+
+#define LOG_CAP_POS 0
+#define LOG_PB_POS 0
+#define LOG_PB_FILL 0
+#define LOG_IOCTLS 0
+
+#if (LOG_CAP_POS || LOG_PB_POS || LOG_PB_FILL || LOG_IOCTLS) && !MANIPULATE_FX
+#error cannot log to capture channel without manipulated fx code
+#endif
+
+#define SNAP_INPUT 0
+#define SNAP_SAMPLES 0
+#define SNAP_SAMPLES_TIME 0
+#define SNAP_SAMPLES_WC 0
+#define SNAP_SAMPLES_VALUES 0
+#define SNAP_SAMPLES_FILTER 0
+#define SNAP_SAMPLES_ADDR 0
+#define SNAP_SAMPLES_XADDR 0
+#define SNAP_SAMPLES_CACHE 1
+#define SNAP_SAMPLES_CACHE_CLP 1
+#define SNAP_SAMPLES_XCACHE 0
+#define SNAP_SAMPLES_MISC 0
+#define SNAP_SAMPLES_XMISC 0
+#define SNAP_CACHE 0
+#define SNAP_REGS 0
+#define SNAP_REGS_FILTER 0
+#define SNAP_REGS_AMOUNT 0
+#define SNAP_INIT 0
+#define SNAP_INIT_VOL 0
+#define SNAP_INTERPOLATOR 0
+#define SNAP_IRQ_HANDLER 0
+#define SNAP_IRQ_THREAD 0
+#define SNAP_IRQ_ADDR_DRV 0
+#define SNAP_IRQ_CLIP_DRV 1
+#define SNAP_IRQ_CLIP 0
+#define SNAP_IRQ_HLIP 0
+#define SNAP_IRQ_CLIE 0
+#define SNAP_IRQ_CACHE 0
+#define SNAP_IRQ_DICE 0
+#define SNAP_OTHER 0
+#define SNAP_OTHER_1 1
+
+#define SNAP_IRQ (SNAP_IRQ_HANDLER || SNAP_IRQ_THREAD)
+
+#define SNAP_THREAD (SNAP_IRQ_THREAD || SNAP_SAMPLES)
+
+#if SNAP_IRQ_THREAD + SNAP_SAMPLES > 1
+#error can snapshot only one of samples and irqs in thread
+#endif
+
+#define RECORD_FX (MANIPULATE_FX || (SNAP_SAMPLES && SNAP_SAMPLES_VALUES))
+
+#define SNAP_SETUP (SNAP_SAMPLES || SNAP_INPUT || SNAP_CACHE || SNAP_REGS || SNAP_INIT || SNAP_INTERPOLATOR || SNAP_IRQ)
+
+#define SNAPSHOT_OFFSET 0  // non-zero breaks LOG_PB_POS
+#define SNAPSHOT_CHANS 1
+#define SNAPSHOT_EXTRA 1
+#define SNAPSHOT_CHANS_TOTAL (SNAPSHOT_EXTRA + SNAPSHOT_CHANS)
+
+#if SNAP_SAMPLES
+
+#define NUM_EMU_SNAPSHOTS 16000
+
+struct emu_sample_snapshot {
+#if SNAP_SAMPLES_TIME
+	struct timespec64 ts;
+#endif
+#if SNAP_SAMPLES_WC
+	u32 wc;
+#endif
+	//u32 cs[SNAPSHOT_CHANS];
+#if SNAP_SAMPLES_VALUES
+	u32 fxbus[SNAPSHOT_CHANS];
+#endif
+#if SNAP_SAMPLES_ADDR
+	u32 ccca[SNAPSHOT_CHANS];
+#endif
+#if SNAP_SAMPLES_XADDR
+	u32 xccca;
+#endif
+#if SNAP_SAMPLES_CACHE
+	u32 ccr[SNAPSHOT_CHANS];
+#if SNAP_SAMPLES_CACHE_CLP
+	u32 clp[SNAPSHOT_CHANS];
+#endif
+#endif
+#if SNAP_SAMPLES_XCACHE
+	u32 xccr;
+#endif
+
+#if SNAP_SAMPLES_FILTER
+	u32 z1[SNAPSHOT_CHANS];
+	u32 z2[SNAPSHOT_CHANS];
+#endif
+
+#if SNAP_SAMPLES_MISC
+	u32 reg0e[SNAPSHOT_CHANS];
+	u32 reg0f[SNAPSHOT_CHANS];
+	u32 reg1f[SNAPSHOT_CHANS];
+	u32 reg57[SNAPSHOT_CHANS];
+	u32 reg7f[SNAPSHOT_CHANS];
+#endif
+#if SNAP_SAMPLES_XMISC
+	u32 xreg0e;
+	u32 xreg0f;
+	u32 xreg1f;
+	u32 xreg57;
+	u32 xreg7f;
+#endif
+};
+#endif
+
+#if SNAP_OTHER
+struct emu_other_snapshot {
+#if SNAP_OTHER_1
+	u8 fpga_reg_28, fpga_reg_29;
+#endif
+};
+#endif
+
+#if SNAP_CACHE
+struct emu_cache_snapshot {
+	u32 voice, ccca, ccr, clp, cd[32];
+};
+#endif
+
+#if SNAP_REGS
+struct emu_reg_snapshot {
+	const char *lbl;
+#if SNAP_REGS_FILTER
+	u32 z1;
+	u32 z2;
+#endif
+	u32 ccr;
+	u32 clp;
+	u32 ccca;
+	u32 cpf;
+	u32 ptrx;
+#if SNAP_REGS_AMOUNT
+	u32 csba;
+#endif
+	u32 wc;
+	int voice;
+};
+#endif
+
+#if SNAP_INIT
+struct emu_init_snapshot {
+	u32 cpf, ptrx, psst, dsl, ccca, ccr;
+#if SNAP_INIT_VOL
+	u32 cvcf, csba, csdc, csfe, cshg;
+#endif
+};
+#endif
+
+#if SNAP_INTERPOLATOR
+struct emu_inter_snapshot {
+	u32 r, s;
+	u32 wc, z1, z2, fx;
+};
+#endif
+
+#if SNAP_IRQ
+struct emu_irq_snapshot {
+	u32 wc, ipr;
+#if SNAP_IRQ_DICE
+	u32 dice;
+#endif
+#if SNAP_IRQ_CLIP
+	u32 clipl, cliph;
+#endif
+#if SNAP_IRQ_HLIP
+	u32 hlipl, hliph;
+#endif
+#if SNAP_IRQ_CLIE
+	u32 cliel, clieh;
+#endif
+	u32 ccca[SNAPSHOT_CHANS_TOTAL];
+#if SNAP_IRQ_CACHE
+	u32 ccr[SNAPSHOT_CHANS_TOTAL];
+#endif
+};
+#endif
+
+enum {
+#if LOG_PB_POS
+	PbLogReg,
+#endif
+#if LOG_CAP_POS
+	CapLogReg,
+#endif
+#if LOG_PB_FILL
+	PbFillLogReg,
+#endif
+#if LOG_IOCTLS
+	IoctlLogReg,
+#endif
+	NumLogRegs
+};
+
 struct snd_emu10k1_pcm {
 	struct snd_emu10k1 *emu;
 	int type;
@@ -1713,6 +1918,9 @@ struct snd_emu1010 {
 	struct mutex lock;
 };
 
+enum { SNAP_SLEEP, SNAP_PREPARE, SNAP_START, SNAP_STOP };
+enum { SNAP_NEW, SNAP_SLEEPING, SNAP_PREPARED, SNAP_STARTED, SNAP_STOPPED };
+
 struct snd_emu10k1 {
 	int irq;
 
@@ -1814,6 +2022,80 @@ struct snd_emu10k1 {
 	const struct firmware *firmware;
 	const struct firmware *dock_fw;
 
+#if PROC_CTL_CACHE
+	int init_read_addr, init_cache_read_addr, init_cache_inval;
+	int init_cache_loop_addr, init_cache_loop_inval, init_cache_loop_flag, init_loop_flag;
+#endif
+#if PROC_CTL_AMOUNTS
+	int init_send_amount;
+#endif
+#if PROC_CTL_LOOP
+	int init_loop_start;
+	int init_loop_end;
+#endif
+
+#if RECORD_FX
+	int fxgprs;
+#endif
+#if MANIPULATE_FX
+	int fngprs;
+#endif
+	atomic_t snapshot_busy;
+#if SNAP_SETUP
+	struct snd_pcm_substream *snapshot_stream;
+	int snap_raw_chans, snap_sub_chans, snap_il, snap_width, snap_stereo, snap_start, snap_period;
+#if SNAP_THREAD
+	int snapshot_cmd, snapshot_rsp;
+#endif
+	int snap_chans, snap_total;
+	int snap_voices[SNAPSHOT_CHANS_TOTAL];
+#endif
+#if SNAP_SAMPLES
+	struct emu_sample_snapshot *snapshots;
+	int num_sample_snaps;
+#endif
+
+#if LOG_CAP_POS
+	int snap_cap_size;
+#endif
+#if LOG_PB_POS || LOG_PB_FILL
+	int snap_pb_base, snap_pb_size;
+#endif
+
+#if SNAP_CACHE
+	struct emu_cache_snapshot snap_cache[2 * SNAPSHOT_CHANS_TOTAL];
+	int num_cache_snaps;
+#endif
+#if SNAP_INIT
+	struct emu_init_snapshot snap_chan[SNAPSHOT_CHANS_TOTAL];
+#endif
+#if SNAP_REGS
+	struct emu_reg_snapshot snap_regs[400 * SNAPSHOT_CHANS_TOTAL];
+	int tried_reg_snaps, num_reg_snaps, reg_snaps_full;
+#endif
+
+#if SNAP_INPUT
+	//snd_pcm_uframes_t snap_avail_max;
+	//snd_pcm_uframes_t snap_hw_ptr_base;	/* Position at buffer restart */
+	//snd_pcm_uframes_t snap_hw_ptr_interrupt; /* Position at interrupt time */
+	//u64 snap_hw_ptr_wrap;
+	u8 *snap_buffer;
+	size_t snap_dma_bytes;
+#endif
+#if SNAP_INTERPOLATOR
+	struct emu_inter_snapshot snap_inter[32 * 100];
+	int num_inter_snaps;
+#endif
+#if SNAP_IRQ
+	struct emu_irq_snapshot snap_irq[1000];
+	int num_irq_snaps;
+	struct snd_emu10k1_voice *irq_voice;
+#endif
+
+#if SNAP_OTHER
+	struct emu_other_snapshot snap_other[10000];
+#endif
+
 #ifdef CONFIG_PM_SLEEP
 	unsigned int *saved_ptr;
 	unsigned int *saved_gpr;
@@ -1894,6 +2176,7 @@ void snd_emu10k1_wait(struct snd_emu10k1 *emu, unsigned int wait);
 static inline unsigned int snd_emu10k1_wc(struct snd_emu10k1 *emu) { return (inl(emu->port + WC) >> 6) & 0xfffff; }
 unsigned short snd_emu10k1_ac97_read(struct snd_ac97 *ac97, unsigned short reg);
 void snd_emu10k1_ac97_write(struct snd_ac97 *ac97, unsigned short reg, unsigned short data);
+void snd_emu10k1_snapshot_other(struct snd_emu10k1 *emu);
 
 #ifdef CONFIG_PM_SLEEP
 void snd_emu10k1_suspend_regs(struct snd_emu10k1 *emu);

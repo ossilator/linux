@@ -1314,6 +1314,14 @@ static int _snd_emu10k1_das_init_efx(struct snd_emu10k1 *emu)
 	gpr_map[bit_shifter16] = 0x00008000;
 	gpr_map[lowword_mask] = 0x0000ffff;
 
+#if MANIPULATE_FX
+	emu->fngprs = gpr;
+	gpr += NumLogRegs;
+#endif
+#if RECORD_FX
+	emu->fxgprs = gpr;
+#endif
+
 	if (emu->card_capabilities->ca0108_chip) {
 		int num_cap = emu->card_capabilities->emu_in_32 ? 32 : 16;
 
@@ -1321,8 +1329,83 @@ static int _snd_emu10k1_das_init_efx(struct snd_emu10k1 *emu)
 			A_OP(icode, &ptr, iMAC0, A_GPR(tmp), A_C_00000000, A_FXBUS(z * 2), A_C_00010000); // >> 15
 			A_OP(icode, &ptr, iMACINT0, A_GPR(tmp + 1), A_C_00000000, A_FXBUS(z * 2 + 1), A_C_00000002); // << 1
 			A_OP(icode, &ptr, iANDXOR, A3_EMU32OUT(z), A_GPR(tmp), A_GPR(lowword_mask), A_GPR(tmp + 1));
+#if RECORD_FX
+			A_OP(icode, &ptr, iACC3, A_GPR(gpr), A3_EMU32OUT(z), A_C_00000000, A_C_00000000);
+			gpr++;
+#endif
 		}
 
+#if MANIPULATE_FX
+		const int count = 2;
+		const int nchan = 32 / count;
+		const int nemu32chan = num_cap / count;
+		int z = 0;
+
+		// DSP loopback - direct; note that this misses the attenuation compensation
+		for (int i = 0; i < 0; i++, z++) {
+			for (int y = 0; y < count; y++) {
+				A_OP(icode, &ptr, iACC3, A_EXTOUT((z + y * nchan) * 2),
+				     A_FXBUS((i * count + y) * 2), A_C_00000000, A_C_00000000);
+				A_OP(icode, &ptr, iACC3, A_EXTOUT((z + y * nchan) * 2 + 1),
+				     A_FXBUS((i * count + y) * 2 + 1), A_C_00000000, A_C_00000000);
+			}
+		}
+
+		// DSP loopback - with 32-bit re-assembly and re-splitting
+		for (int i = 0; i < 2; i++, z++) {
+			for (int y = 0; y < count; y++) {
+				snd_emu10k1_audigy_dsp_convert_32_to_2x16(
+					icode, &ptr, tmp + 1, bit_shifter16,
+					A_GPR(emu->fxgprs + i * count + y), A_EXTOUT((z + y * nchan) * 2));
+			}
+		}
+
+		// value injection from CPU
+		for (int i = 0; i < NumLogRegs; i++, z++) {
+			for (int y = 0; y < count; y++) {
+				snd_emu10k1_audigy_dsp_convert_32_to_2x16(
+					icode, &ptr, tmp + 1, bit_shifter16,
+					A_GPR(emu->fngprs + i), A_EXTOUT((z + y * nchan) * 2));
+			}
+		}
+
+		// generator
+		//for (int i = 0; z < nchan; i++, z++) {
+		for (int i = 0; i < 0; i++, z++) {
+			int summand = gpr++;
+			int sum = gpr++;
+			gpr_map[summand] = 0x1513f1 + i * 0x00090000;
+			gpr_map[sum] = 0;
+			for (int y = 0; y < count; y++) {
+				snd_emu10k1_audigy_dsp_convert_32_to_2x16(
+					icode, &ptr, tmp, bit_shifter16, A_GPR(sum), A_EXTOUT((z + y * nchan) * 2));
+				A_OP(icode, &ptr, iMAC3, A_GPR(sum), A_GPR(sum), A_GPR(summand), A_C_80000000);
+			}
+		}
+
+		// FX input
+		for (int i = 0; i < 4; i++, z++) {
+		//for (; z < nchan; z++) {
+		//for (; z < 4; z++) {
+			for (int y = 0; y < count; y++) {
+				if (!i & !y) {
+					snd_emu10k1_audigy_dsp_convert_32_to_2x16(
+						icode, &ptr, tmp, bit_shifter16,
+						A3_EMU32IN(0), A_EXTOUT(z * 2));
+				} else {
+					snd_emu10k1_audigy_dsp_convert_32_to_2x16(
+						icode, &ptr, tmp, bit_shifter16,
+						A_GPR(gpr), A_EXTOUT((z + y * nchan) * 2));
+					A_OP(icode, &ptr, iACC3, A_GPR(gpr),
+						A3_EMU32IN(i + y * nemu32chan), A_C_00000000, A_C_00000000);
+					gpr_map[gpr++] = 0x00000000;
+				}
+			}
+		}
+
+		BUG_ON(z > nchan);
+
+#else
 		snd_emu10k1_audigy_dsp_convert_32_to_2x16(
 			icode, &ptr, tmp, bit_shifter16, A3_EMU32IN(0), A_EXTOUT(0));
 		// A3_EMU32IN(0) is delayed by one sample, so all other A3_EMU32IN channels
@@ -1333,6 +1416,7 @@ static int _snd_emu10k1_das_init_efx(struct snd_emu10k1 *emu)
 			A_OP(icode, &ptr, iACC3, A_GPR(gpr), A3_EMU32IN(z), A_C_00000000, A_C_00000000);
 			gpr_map[gpr++] = 0x00000000;
 		}
+#endif
 	} else {
 		for (int z = 0; z < 16; z++) {
 			A_OP(icode, &ptr, iMAC0, A_GPR(tmp), A_C_00000000, A_FXBUS(z * 2), A_C_00010000); // >> 15
@@ -1734,12 +1818,20 @@ static int _snd_emu10k1_audigy_init_efx(struct snd_emu10k1 *emu)
 	snd_emu10k1_init_mono_control(&controls[nctl++], "Wave Master Playback Volume", gpr, 0);
 	gpr++;
 
+#if RECORD_FX
+	emu->fxgprs = gpr;
+#endif
+
 	if (emu->card_capabilities->emu_model) {
 		/* EMU1010 Outputs from PCM Front, Rear, Center, LFE, Side */
 		dev_info(emu->card->dev, "EMU outputs on\n");
 		for (z = 0; z < 8; z++) {
 			if (emu->card_capabilities->ca0108_chip) {
 				A_OP(icode, &ptr, iACC3, A3_EMU32OUT(z), A_GPR(playback + z), A_C_00000000, A_C_00000000);
+#if RECORD_FX
+				A_OP(icode, &ptr, iACC3, A_GPR(gpr), A3_EMU32OUT(z), A_C_00000000, A_C_00000000);
+				gpr++;
+#endif
 			} else {
 				A_OP(icode, &ptr, iACC3, A_EMU32OUTL(z), A_GPR(playback + z), A_C_00000000, A_C_00000000);
 			}
@@ -1798,6 +1890,28 @@ static int _snd_emu10k1_audigy_init_efx(struct snd_emu10k1 *emu)
 	if (emu->card_capabilities->emu_model) {
 		/* Capture 16 channels of S32_LE sound. */
 		if (emu->card_capabilities->ca0108_chip) {
+//			dev_info(emu->card->dev, "fixed EMU inputs\n");
+//
+//			snd_emu10k1_audigy_dsp_convert_32_to_2x16( icode, &ptr, tmp,
+//								bit_shifter16,
+//								A3_EMU32IN(0),
+//								A_FXBUS2(0) );
+//			snd_emu10k1_audigy_dsp_convert_32_to_2x16( icode, &ptr, tmp,
+//								bit_shifter16,
+//								A3_EMU32IN(1),
+//								A_FXBUS2(2) );
+//			for (z = 0; z < 16; z++) {
+//				//snd_emu10k1_audigy_dsp_convert_32_to_2x16( icode, &ptr, tmp,
+//				//					bit_shifter16,
+//				//					A_GPR(gpr),
+//				//					A_FXBUS2(z*2) );
+//				//gpr_map[gpr++] = 0x0f000300 | z | (z << 16);
+//				A_OP(icode, &ptr, iACC3, A_FXBUS2(z*2), A_GPR(gpr), A_C_00000000, A_C_00000000);
+//				A_OP(icode, &ptr, iACC3, A_FXBUS2(z*2 + 1), A_GPR(gpr + 1), A_C_00000000, A_C_00000000);
+//				gpr_map[gpr++] = 0x03000000 | (z << 16);
+//				gpr_map[gpr++] = 0x0f000000 | (z << 16);
+//			}
+//		} else if (0) {
 			dev_info(emu->card->dev, "EMU2 inputs on\n");
 			/* Note that the Tina[2] DSPs have 16 more EMU32 inputs which we don't use. */
 
@@ -1847,6 +1961,15 @@ static int _snd_emu10k1_audigy_init_efx(struct snd_emu10k1 *emu)
 		}
 	}
 	
+	while (ptr < 0x3c0)
+		A_OP(icode, &ptr, 0x0f, 0xc0, 0xc0, 0xcf, 0xc0);
+	for (z = 0; z < 64; z++) {
+		//A_OP(icode, &ptr, iACC3, A_GPR(gpr), A_C_00000001 + z, A_C_00000000, A_C_00000000);
+		//A_OP(icode, &ptr, iACC3, A_GPR(gpr), A_GPR(z), A_C_00000000, A_C_00000000);
+		A_OP(icode, &ptr, iACC3, A_GPR(gpr), A_FXBUS(z), A_FXBUS(z), A_C_00000000);
+		gpr++;
+	}
+
 #endif /* JCD test */
 	/*
 	 * ok, set up done..
@@ -1857,6 +1980,17 @@ static int _snd_emu10k1_audigy_init_efx(struct snd_emu10k1 *emu)
 		err = -EIO;
 		goto __err;
 	}
+
+	//gpr = 0x180;
+	//// 600
+	//int gpr42 = gpr;
+	//gpr_map[gpr++] = 0x0000002a;
+	//int gpr_42 = gpr;
+	//gpr_map[gpr++] = -0x0000002a;
+	//// out = 42 * int_max >> 31
+	//A_OP(icode, &ptr, iMAC0, A_GPR(gpr++), A_C_00000000, A_GPR(gpr42), A_C_7fffffff);
+	//// out = 42 * int_min >> 31
+	//A_OP(icode, &ptr, iMAC0, A_GPR(gpr++), A_C_00000000, A_GPR(gpr42), A_C_80000000);
 
 	/* clear remaining instruction memory */
 	while (ptr < 0x400)

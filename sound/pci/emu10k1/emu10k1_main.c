@@ -396,6 +396,17 @@ static void snd_emu10k1_audio_enable(struct snd_emu10k1 *emu)
 		snd_emu10k1_intr_enable(emu, INTE_PCIERRORENABLE | INTE_A_GPIOENABLE);
 	else
 		snd_emu10k1_intr_enable(emu, INTE_PCIERRORENABLE);
+
+//	u32 reg;
+//	snd_emu1010_fpga_read(emu, EMU_HANA_LOCK_STS_LO, &reg);
+//	dev_info(emu->card->dev, "read fpga: %x\n", reg);
+//	mdelay(1);
+//	snd_emu1010_fpga_read(emu, EMU_HANA_ID, &reg);
+//	dev_info(emu->card->dev, "read fpga: %x\n", reg);
+//	mdelay(1);
+//	snd_emu1010_fpga_read(emu, EMU_HANA_LOCK_STS_LO, &reg);
+//	dev_info(emu->card->dev, "read fpga: %x\n", reg);
+//	mdelay(1);
 }
 
 int snd_emu10k1_done(struct snd_emu10k1 *emu)
@@ -927,6 +938,13 @@ static void free_pm_buffer(struct snd_emu10k1 *emu);
 static void snd_emu10k1_free(struct snd_card *card)
 {
 	struct snd_emu10k1 *emu = card->private_data;
+
+#if SNAP_SAMPLES
+	kfree(emu->snapshots);
+#endif
+#if SNAP_INPUT
+	kfree(emu->snap_buffer);
+#endif
 
 	if (emu->port) {	/* avoid access to already used hardware */
 		snd_emu10k1_fx8010_tram_setup(emu, 0);
@@ -1710,6 +1728,23 @@ int snd_emu10k1_create(struct snd_card *card,
 	for (idx = 0; idx < NUM_G; idx++)
 		emu->voices[idx].number = idx;
 
+#if PROC_CTL_CACHE
+	emu->init_read_addr = -1;
+	emu->init_cache_read_addr = -1;
+	emu->init_cache_inval = -1;
+	emu->init_cache_loop_addr = -1;
+	emu->init_cache_loop_inval = -1;
+	emu->init_cache_loop_flag = -1;
+	emu->init_loop_flag = -1;
+#endif
+#if PROC_CTL_AMOUNTS
+	emu->init_send_amount = -1;
+#endif
+#if PROC_CTL_LOOP
+	emu->init_loop_start = -1;
+	emu->init_loop_end = -1;
+#endif
+
 	err = snd_emu10k1_init(emu, enable_ir);
 	if (err < 0)
 		return err;
@@ -1724,6 +1759,13 @@ int snd_emu10k1_create(struct snd_card *card,
 	if (err < 0)
 		return err;
 	snd_emu10k1_audio_enable(emu);
+
+#if SNAP_SAMPLES
+	emu->snapshots = kzalloc(sizeof(struct emu_sample_snapshot) * NUM_EMU_SNAPSHOTS, GFP_KERNEL);
+	if (!emu->snapshots)
+		dev_err(emu->card->dev, "cannot alloc snapshots\n");
+#endif
+	atomic_set(&emu->snapshot_busy, 0);
 
 #ifdef CONFIG_SND_PROC_FS
 	snd_emu10k1_proc_init(emu);
