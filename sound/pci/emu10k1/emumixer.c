@@ -1594,12 +1594,12 @@ static int snd_emu1010_clock_source_put(struct snd_kcontrol *kcontrol,
 					emu_ci->vals[val];
 		snd_emu1010_update_clock(emu);
 
-		snd_emu1010_fpga_write(emu, EMU_HANA_UNMUTE, EMU_MUTE);
+		//snd_emu1010_fpga_write(emu, EMU_HANA_UNMUTE, EMU_MUTE);
 		snd_emu1010_fpga_write(emu, EMU_HANA_WCLOCK, emu->emu1010.wclock);
 		spin_unlock_irq(&emu->reg_lock);
 
-		msleep(10);  // Allow DLL to settle
-		snd_emu1010_fpga_write(emu, EMU_HANA_UNMUTE, EMU_UNMUTE);
+		//msleep(10);  // Allow DLL to settle
+		//snd_emu1010_fpga_write(emu, EMU_HANA_UNMUTE, EMU_UNMUTE);
 	} else {
 		spin_unlock_irq(&emu->reg_lock);
 	}

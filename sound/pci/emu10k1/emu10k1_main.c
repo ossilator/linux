@@ -801,6 +801,7 @@ static void emu1010_clock_work(struct work_struct *work)
 {
 	struct snd_emu10k1 *emu;
 	struct snd_ctl_elem_id id;
+	u32 reg;
 
 	emu = container_of(work, struct snd_emu10k1,
 			   emu1010.clock_work);
@@ -812,10 +813,16 @@ static void emu1010_clock_work(struct work_struct *work)
 #endif
 
 	spin_lock_irq(&emu->reg_lock);
-	// This is the only thing that can actually happen.
-	emu->emu1010.clock_source = emu->emu1010.clock_fallback;
-	emu->emu1010.wclock = (emu->emu1010.wclock & ~EMU_HANA_WCLOCK_SRC_MASK) |
-				(1 - emu->emu1010.clock_source);
+	snd_emu1010_fpga_read(emu, EMU_HANA_WCLOCK, &reg);
+	if ((reg & EMU_HANA_WCLOCK_SRC_MASK) < 2) {
+		emu->emu1010.clock_source = emu->emu1010.clock_fallback;
+		emu->emu1010.wclock = (emu->emu1010.wclock & ~EMU_HANA_WCLOCK_SRC_MASK) |
+					(1 - emu->emu1010.clock_source);
+		dev_info(emu->card->dev, "emu1010: External clock lost\n");
+	} else {
+		// Can this actually happen?
+		dev_info(emu->card->dev, "emu1010: External clock rate changed\n");
+	}
 	snd_emu1010_update_clock(emu);
 	spin_unlock_irq(&emu->reg_lock);
 	snd_ctl_build_ioff(&id, emu->ctl_clock_source, 0);
