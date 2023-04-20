@@ -84,6 +84,7 @@ This contains the OSS sequencer emulation code.
 include directory
 -----------------
 
+// FIXME: needs update for uapi
 This is the place for the public header files of ALSA drivers, which are
 to be exported to user-space, or included by several files in different
 directories. Basically, the private header files should not be placed in
@@ -1690,6 +1691,7 @@ frames as signed integer.
 DMA Buffer Information
 ~~~~~~~~~~~~~~~~~~~~~~
 
+// FIXME: this is outdated; dma_private is available only through dma_buffer_p!
 The DMA buffer is defined by the following four fields: ``dma_area``,
 ``dma_addr``, ``dma_bytes`` and ``dma_private``. ``dma_area``
 holds the buffer pointer (the logical address). You can call
@@ -1717,6 +1719,7 @@ a pointer to a struct snd_pcm_mmap_status record.
 For example, you can get the current
 DMA hardware pointer via ``runtime->status->hw_ptr``.
 
+// FIXME: DMA application pointer is not explained.
 The DMA application pointer can be referred via ``runtime->control``,
 which points to a struct snd_pcm_mmap_control record.
 However, accessing this value directly is not recommended.
@@ -2017,6 +2020,8 @@ the position and calculates the available space, and wakes up the
 sleeping poll threads, etc.
 
 This callback is also atomic by default.
+
+FIXME: this does not specifiy whether this is the pre- or post-fifo position.
 
 copy and fill_silence ops
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2392,6 +2397,10 @@ The ``name`` is the name identifier string. Since ALSA 0.9.x, the
 control name is very important, because its role is classified from
 its name. There are pre-defined standard control names. The details
 are described in the `Control Names`_ subsection.
+// This is a questionable design, IMO. Why user-space heuristics when
+// the driver could set the roles/capabilities? This would avoid
+// problems like the Tone Control sliders (unlike the switch?!) being
+// misclassified as applying also to capture.
 
 The ``index`` field holds the index number of this control. If there
 are several different controls with the same name, they can be
@@ -2493,6 +2502,7 @@ setting the ``INACTIVE`` flag may be appropriate. For example, PCM
 controls should be inactive while no PCM device is open.
 
 There are ``LOCK`` and ``OWNER`` flags to change the write permissions.
+// FIXME: explain.
 
 Control Callbacks
 -----------------
@@ -3363,6 +3373,7 @@ Buffer and Memory Management
 Buffer Types
 ------------
 
+// FIXME: this appears obsolete, i only found one pair of functions.
 ALSA provides several different buffer allocation functions depending on
 the bus and the architecture. All these have a consistent API. The
 allocation of physically-contiguous pages is done via the
@@ -3560,6 +3571,7 @@ the struct pci_dev pointer of the chip as well::
   snd_pcm_set_managed_buffer_all(pcm, SNDRV_DMA_TYPE_DEV_SG,
                                  &pci->dev, size, max);
 
+// FIXME: dma_private again
 The ``struct snd_sg_buf`` instance is created as
 ``substream->dma_private`` in turn. You can cast the pointer like::
 
@@ -3657,6 +3669,7 @@ user (root by default), do as follows::
 and set the write buffer size and the callback::
 
   entry->c.text.write = my_proc_write;
+  // FIXME: something's missing here?
 
 In the write callback, you can use :c:func:`snd_info_get_line()`
 to get a text line, and :c:func:`snd_info_get_str()` to retrieve
