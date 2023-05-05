@@ -67,6 +67,11 @@ void snd_pcm_playback_silence(struct snd_pcm_substream *substream, snd_pcm_ufram
 	snd_pcm_uframes_t frames, ofs, transfer;
 	int err;
 
+	if (runtime->silence_size == 0 &&
+	    (runtime->state != SNDRV_PCM_STATE_DRAINING ||
+	     (runtime->info & SNDRV_PCM_HW_PARAMS_NO_DRAIN_SILENCE) ||
+	     (runtime->hw.info & SNDRV_PCM_INFO_PERFECT_DRAIN)))
+		return;
 	if (runtime->silence_size < runtime->boundary) {
 		snd_pcm_sframes_t noise_dist;
 		snd_pcm_uframes_t appl_ptr = READ_ONCE(runtime->control->appl_ptr);
@@ -80,6 +85,33 @@ void snd_pcm_playback_silence(struct snd_pcm_substream *substream, snd_pcm_ufram
 			noise_dist += runtime->boundary;
 		/* total noise distance */
 		noise_dist += runtime->silence_filled;
+		if (runtime->state == SNDRV_PCM_STATE_DRAINING) {
+			snd_pcm_uframes_t slack = runtime->rate / 10;
+			snd_pcm_sframes_t threshold;
+			snd_pcm_uframes_t ps = runtime->period_size;
+			snd_pcm_uframes_t silence_size = ps;
+			// Round down to start of next period. This is disabled
+			// if the period count is not integer.
+			if (runtime->periods * ps == runtime->buffer_size)
+				silence_size = ps - (appl_ptr + ps - 1) % ps - 1;
+			// Add overshoot to accomodate FIFOs and IRQ delays.
+			// The default 1/10th secs is very generous. But more than one
+			// period doesn't make sense; the driver would set the minimum
+			// period size accordingly.
+			slack = min(slack, ps);
+			silence_size += slack;
+			// This catches the periods == 1 case.
+			silence_size = min(silence_size, runtime->buffer_size);
+
+			threshold = ps + slack;
+			if (noise_dist >= threshold)
+				return;
+			frames = threshold - noise_dist;
+			if (frames > silence_size)
+				frames = silence_size;
+
+			goto avoid_reindent;
+		}
 		if (noise_dist >= (snd_pcm_sframes_t) runtime->silence_threshold)
 			return;
 		frames = runtime->silence_threshold - noise_dist;
@@ -118,6 +150,7 @@ void snd_pcm_playback_silence(struct snd_pcm_substream *substream, snd_pcm_ufram
 		 */
 		frames = runtime->buffer_size - runtime->silence_filled;
 	}
+avoid_reindent:
 	if (snd_BUG_ON(frames > runtime->buffer_size))
 		return;
 	if (frames == 0)
@@ -465,7 +498,7 @@ static int snd_pcm_update_hw_ptr0(struct snd_pcm_substream *substream,
 	}
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK &&
-	    runtime->silence_size > 0)
+	    (runtime->silence_size > 0 || runtime->state == SNDRV_PCM_STATE_DRAINING))
 		snd_pcm_playback_silence(substream, new_hw_ptr);
 
 	if (in_interrupt) {
