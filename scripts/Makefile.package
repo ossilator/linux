@@ -97,6 +97,9 @@ quiet_cmd_debianize = GEN     $@
 debian: FORCE
 	$(call cmd,debianize)
 
+PHONY += prepdeb-pkg
+prepdeb-pkg: debian
+
 PHONY += debian-orig
 debian-orig: private source = $(shell dpkg-parsechangelog -S Source)
 debian-orig: private version = $(shell dpkg-parsechangelog -S Version | sed 's/-[^-]*$$//')
