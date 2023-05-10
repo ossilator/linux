@@ -519,7 +519,7 @@ struct hdac_stream {
 	unsigned int bufsize;	/* size of the play buffer in bytes */
 	unsigned int period_bytes; /* size of the period in bytes */
 	unsigned int frags;	/* number for period in the play buffer */
-	unsigned int fifo_size;	/* FIFO size */
+	unsigned int fifo_size;	/* FIFO size */ // XXX in bytes or frames?
 
 	void __iomem *sd_addr;	/* stream descriptor pointer */
 
