@@ -75,7 +75,12 @@ void snd_pcm_playback_silence(struct snd_pcm_substream *substream, snd_pcm_ufram
 	if (runtime->silence_size < runtime->boundary) {
 		snd_pcm_sframes_t noise_dist;
 		snd_pcm_uframes_t appl_ptr = READ_ONCE(runtime->control->appl_ptr);
+		dev_info(substream->pcm->card->dev, "check thresholded silence fill, "
+						    "sil start %lu, sil fill %lu, app %lu\n",
+			 runtime->silence_start, runtime->silence_filled, appl_ptr);
 		update_silence_vars(runtime, runtime->silence_start, appl_ptr);
+		dev_info(substream->pcm->card->dev, "now sil start %lu, sil fill %lu\n",
+			 runtime->silence_start, runtime->silence_filled);
 		/* initialization outside pointer updates */
 		if (new_hw_ptr == ULONG_MAX)
 			new_hw_ptr = runtime->status->hw_ptr;
@@ -85,6 +90,7 @@ void snd_pcm_playback_silence(struct snd_pcm_substream *substream, snd_pcm_ufram
 			noise_dist += runtime->boundary;
 		/* total noise distance */
 		noise_dist += runtime->silence_filled;
+		dev_info(substream->pcm->card->dev, "noise dist %ld\n", noise_dist);
 		if (runtime->state == SNDRV_PCM_STATE_DRAINING) {
 			snd_pcm_uframes_t slack = runtime->rate / 10;
 			snd_pcm_sframes_t threshold;
@@ -94,19 +100,23 @@ void snd_pcm_playback_silence(struct snd_pcm_substream *substream, snd_pcm_ufram
 			// if the period count is not integer.
 			if (runtime->periods * ps == runtime->buffer_size)
 				silence_size = ps - (appl_ptr + ps - 1) % ps - 1;
+			dev_info(substream->pcm->card->dev, "drain raw size %lu\n", silence_size);
 			// Add overshoot to accomodate FIFOs and IRQ delays.
 			// The default 1/10th secs is very generous. But more than one
 			// period doesn't make sense; the driver would set the minimum
 			// period size accordingly.
 			slack = min(slack, ps);
 			silence_size += slack;
+			dev_info(substream->pcm->card->dev, "drain extended size %lu\n", silence_size);
 			// This catches the periods == 1 case.
 			silence_size = min(silence_size, runtime->buffer_size);
+			dev_info(substream->pcm->card->dev, "drain bounded size %lu\n", silence_size);
 
 			threshold = ps + slack;
 			if (noise_dist >= threshold)
 				return;
 			frames = threshold - noise_dist;
+			dev_info(substream->pcm->card->dev, "drain raw frames %lu\n", frames);
 			if (frames > silence_size)
 				frames = silence_size;
 
@@ -133,6 +143,9 @@ void snd_pcm_playback_silence(struct snd_pcm_substream *substream, snd_pcm_ufram
 			snd_pcm_sframes_t avail = runtime->control->appl_ptr - hw_ptr;
 			if (avail < 0)
 				avail += runtime->boundary;
+			dev_info(substream->pcm->card->dev, "check top-up init silence fill, "
+							    "sil start %lu, sil fill %lu, avail %ld\n",
+				 runtime->silence_start, runtime->silence_filled, avail);
 			/*
 			 * In free-running mode, appl_ptr will be zero even while running,
 			 * so we end up with a huge number. There is no useful way to
@@ -142,15 +155,21 @@ void snd_pcm_playback_silence(struct snd_pcm_substream *substream, snd_pcm_ufram
 			runtime->silence_start = hw_ptr;
 		} else {
 			/* Silence the just played area immediately */
+			dev_info(substream->pcm->card->dev, "check top-up cont silence fill, "
+							    "sil start %lu, sil fill %lu, old hw %lu, new hw %lu\n",
+				 runtime->silence_start, runtime->silence_filled, hw_ptr, new_hw_ptr);
 			update_silence_vars(runtime, hw_ptr, new_hw_ptr);
 		}
 		/*
 		 * In this mode, silence_filled actually includes the valid
 		 * sample data from the user.
 		 */
+		dev_info(substream->pcm->card->dev, "now sil start %lu, sil fill %lu\n",
+			 runtime->silence_start, runtime->silence_filled);
 		frames = runtime->buffer_size - runtime->silence_filled;
 	}
 avoid_reindent:
+	dev_info(substream->pcm->card->dev, "frames %lu\n", frames);
 	if (snd_BUG_ON(frames > runtime->buffer_size))
 		return;
 	if (frames == 0)
@@ -158,6 +177,7 @@ avoid_reindent:
 	ofs = (runtime->silence_start + runtime->silence_filled) % runtime->buffer_size;
 	do {
 		transfer = ofs + frames > runtime->buffer_size ? runtime->buffer_size - ofs : frames;
+		dev_info(substream->pcm->card->dev, "filling %lu at %lu\n", transfer, ofs);
 		err = fill_silence_frames(substream, ofs, transfer);
 		snd_BUG_ON(err < 0);
 		runtime->silence_filled += transfer;
@@ -1779,6 +1799,7 @@ static int snd_pcm_lib_ioctl_reset(struct snd_pcm_substream *substream,
 	struct snd_pcm_runtime *runtime = substream->runtime;
 
 	guard(pcm_stream_lock_irqsave)(substream);
+	dev_info(substream->pcm->card->dev, "ioctl reset\n");
 	if (snd_pcm_running(substream) &&
 	    snd_pcm_update_hw_ptr(substream) >= 0)
 		runtime->status->hw_ptr %= runtime->buffer_size;
@@ -1903,6 +1924,9 @@ void snd_pcm_period_elapsed_under_stream_lock(struct snd_pcm_substream *substrea
 	if (PCM_RUNTIME_CHECK(substream))
 		return;
 	runtime = substream->runtime;
+
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
+		dev_info(substream->pcm->card->dev, "period elapsed\n");
 
 	if (!snd_pcm_running(substream) ||
 	    snd_pcm_update_hw_ptr0(substream, 1) < 0)
@@ -2231,6 +2255,8 @@ int pcm_lib_apply_appl_ptr(struct snd_pcm_substream *substream,
 	snd_pcm_sframes_t diff;
 	int ret;
 
+	dev_info(substream->pcm->card->dev, "apply app %lu, old %lu\n", appl_ptr, old_appl_ptr);
+
 	if (old_appl_ptr == appl_ptr)
 		return 0;
 
@@ -2321,6 +2347,7 @@ snd_pcm_sframes_t __snd_pcm_lib_xfer(struct snd_pcm_substream *substream,
 		goto _end_unlock;
 
 	runtime->twake = runtime->control->avail_min ? : 1;
+	dev_info(substream->pcm->card->dev, "xfering\n");
 	if (runtime->state == SNDRV_PCM_STATE_RUNNING)
 		snd_pcm_update_hw_ptr(substream);
 
@@ -2380,6 +2407,8 @@ snd_pcm_sframes_t __snd_pcm_lib_xfer(struct snd_pcm_substream *substream,
 			     transfer, in_kernel);
 		if (is_playback)
 			snd_pcm_dma_buffer_sync(substream, SNDRV_DMA_SYNC_DEVICE);
+		if (is_playback)
+			dev_info(substream->pcm->card->dev, "transferred %lu, app %lu\n", frames, appl_ptr);
 		snd_pcm_stream_lock_irq(substream);
 		atomic_dec(&runtime->buffer_accessing);
 		if (err < 0)

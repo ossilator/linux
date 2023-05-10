@@ -533,6 +533,9 @@ static int snd_emu10k1_efx_playback_prepare(struct snd_pcm_substream *substream)
 		}
 	}
 
+	//runtime->silence_size = runtime->silence_threshold = runtime->period_size + (64 << shift);
+	//runtime->silence_size = ULONG_MAX;
+
 	return 0;
 }
 
@@ -855,10 +858,12 @@ static int snd_emu10k1_playback_trigger(struct snd_pcm_substream *substream,
 		snd_emu10k1_playback_set_running(emu, epcm);
 		snd_emu10k1_playback_trigger_voice(emu, epcm->voices[0]);
 		snd_emu10k1_playback_trigger_voice(emu, epcm->extra);
+		dev_info(substream->pcm->card->dev, "playback started\n");
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
 	case SNDRV_PCM_TRIGGER_SUSPEND:
+		dev_info(substream->pcm->card->dev, "playback stopping\n");
 		snd_emu10k1_playback_stop_voice(emu, epcm->voices[0]);
 		snd_emu10k1_playback_stop_voice(emu, epcm->extra);
 		snd_emu10k1_playback_set_stopped(emu, epcm);
@@ -1090,6 +1095,7 @@ static int snd_emu10k1_efx_playback_trigger(struct snd_pcm_substream *substream,
 				// The extra voice is allowed to lag a bit
 				if (!emu->das_mode)
 					snd_emu10k1_playback_trigger_voice(emu, epcm->extra);
+				dev_info(substream->pcm->card->dev, "playback started\n");
 				goto leave;
 			}
 
@@ -1105,6 +1111,7 @@ static int snd_emu10k1_efx_playback_trigger(struct snd_pcm_substream *substream,
 	case SNDRV_PCM_TRIGGER_SUSPEND:
 	case SNDRV_PCM_TRIGGER_STOP:
 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
+		dev_info(substream->pcm->card->dev, "playback stopping\n");
 		if (!emu->das_mode)
 			snd_emu10k1_playback_stop_voice(emu, epcm->extra);
 		snd_emu10k1_efx_playback_stop_voices(

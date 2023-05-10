@@ -966,6 +966,7 @@ static int snd_pcm_sw_params(struct snd_pcm_substream *substream,
 		runtime->silence_size = params->silence_size;
 		params->boundary = runtime->boundary;
 		if (snd_pcm_running(substream)) {
+			dev_info(substream->pcm->card->dev, "set sw param while running\n");
 			if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK &&
 			    runtime->silence_size > 0)
 				snd_pcm_playback_silence(substream, ULONG_MAX);
@@ -1030,6 +1031,7 @@ int snd_pcm_status64(struct snd_pcm_substream *substream,
 	status->trigger_tstamp_sec = runtime->trigger_tstamp.tv_sec;
 	status->trigger_tstamp_nsec = runtime->trigger_tstamp.tv_nsec;
 	if (snd_pcm_running(substream)) {
+		dev_info(substream->pcm->card->dev, "get status while running\n");
 		snd_pcm_update_hw_ptr(substream);
 		if (runtime->tstamp_mode == SNDRV_PCM_TSTAMP_ENABLE) {
 			status->tstamp_sec = runtime->status->tstamp.tv_sec;
@@ -1453,6 +1455,7 @@ static void snd_pcm_post_start(struct snd_pcm_substream *substream,
 	runtime->hw_ptr_buffer_jiffies = (runtime->buffer_size * HZ) / 
 							    runtime->rate;
 	__snd_pcm_set_state(runtime, state);
+	dev_info(substream->pcm->card->dev, "post start\n");
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK &&
 	    (runtime->silence_size > 0 || state == SNDRV_PCM_STATE_DRAINING))
 		snd_pcm_playback_silence(substream, ULONG_MAX);
@@ -1602,6 +1605,7 @@ static int snd_pcm_do_pause(struct snd_pcm_substream *substream,
 {
 	if (substream->runtime->trigger_master != substream)
 		return 0;
+	dev_info(substream->pcm->card->dev, "do_pause, state = %d\n", state);
 	/* The jiffies check in snd_pcm_update_hw_ptr*() is done by
 	 * a delta between the current jiffies, this gives a large enough
 	 * delta, effectively to skip the check once.
@@ -1897,6 +1901,7 @@ static void snd_pcm_post_reset(struct snd_pcm_substream *substream,
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	guard(pcm_stream_lock_irq)(substream);
 	runtime->control->appl_ptr = runtime->status->hw_ptr;
+	dev_info(substream->pcm->card->dev, "post reset\n");
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK &&
 	    runtime->silence_size > 0)
 		snd_pcm_playback_silence(substream, ULONG_MAX);
@@ -2914,6 +2919,7 @@ static int do_pcm_hwsync(struct snd_pcm_substream *substream)
 			return -EBADFD;
 		fallthrough;
 	case SNDRV_PCM_STATE_RUNNING:
+		dev_info(substream->pcm->card->dev, "hwsync\n");
 		return snd_pcm_update_hw_ptr(substream);
 	case SNDRV_PCM_STATE_PREPARED:
 	case SNDRV_PCM_STATE_PAUSED:
