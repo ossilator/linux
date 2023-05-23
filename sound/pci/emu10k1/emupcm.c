@@ -208,7 +208,7 @@ static void snd_emu10k1_constrain_capture_rates(struct snd_emu10k1 *emu,
 						struct snd_pcm_runtime *runtime)
 {
 	if (emu->card_capabilities->emu_model &&
-	    emu->emu1010.word_clock == 44100) {
+	    snd_emu1010_get_clock(emu) == 44100) {
 		// This also sets the rate constraint by deleting SNDRV_PCM_RATE_KNOT
 		runtime->hw.rates = SNDRV_PCM_RATE_11025 | \
 				    SNDRV_PCM_RATE_22050 | \
@@ -227,7 +227,7 @@ static void snd_emu1010_constrain_efx_rate(struct snd_emu10k1 *emu,
 {
 	int rate;
 
-	rate = emu->emu1010.word_clock << emu->emu1010.clock_shift;
+	rate = snd_emu1010_get_clock(emu) << emu->emu1010.clock_shift;
 	runtime->hw.rate_min = runtime->hw.rate_max = rate;
 	runtime->hw.rates = snd_pcm_rate_to_rate_bit(rate);
 }
@@ -1494,7 +1494,7 @@ static int snd_emu10k1_playback_open(struct snd_pcm_substream *substream)
 		return err;
 	}
 	if (emu->card_capabilities->emu_model)
-		sample_rate = emu->emu1010.word_clock;
+		sample_rate = snd_emu1010_get_clock(emu);
 	else
 		sample_rate = 48000;
 	err = snd_pcm_hw_rule_noresample(runtime, sample_rate);

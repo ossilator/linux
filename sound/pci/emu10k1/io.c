@@ -457,6 +457,16 @@ void snd_emu1010_update_clock(struct snd_emu10k1 *emu)
 	snd_emu1010_fpga_write(emu, EMU_HANA_DOCK_LEDS_2, leds);
 }
 
+int snd_emu1010_get_clock(struct snd_emu10k1 *emu)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&emu->reg_lock, flags);
+	snd_emu1010_update_clock(emu);
+	spin_unlock_irqrestore(&emu->reg_lock, flags);
+	return emu->emu1010.word_clock;
+}
+
 void snd_emu10k1_intr_enable(struct snd_emu10k1 *emu, unsigned int intrenb)
 {
 	unsigned long flags;

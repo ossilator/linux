@@ -11,6 +11,15 @@
 #include <sound/core.h>
 #include <sound/emu10k1.h>
 
+static int snd_emu10k1_timer_open(struct snd_timer *timer)
+{
+	struct snd_emu10k1 *emu = snd_timer_chip(timer);
+
+	if (emu->card_capabilities->emu_model)
+		snd_emu1010_get_clock(emu);
+	return 0;
+}
+
 static int snd_emu10k1_timer_start(struct snd_timer *timer)
 {
 	struct snd_emu10k1 *emu;
@@ -61,6 +70,7 @@ static int snd_emu10k1_timer_precise_resolution(struct snd_timer *timer,
 static const struct snd_timer_hardware snd_emu10k1_timer_hw = {
 	.flags = SNDRV_TIMER_HW_AUTO,
 	.ticks = 1024,
+	.open = snd_emu10k1_timer_open,
 	.start = snd_emu10k1_timer_start,
 	.stop = snd_emu10k1_timer_stop,
 	.c_resolution = snd_emu10k1_timer_c_resolution,
