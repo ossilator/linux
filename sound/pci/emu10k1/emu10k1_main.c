@@ -748,7 +748,8 @@ static void emu1010_clock_event(struct snd_emu10k1 *emu)
 	spin_lock_irq(&emu->reg_lock);
 	// This is the only thing that can actually happen.
 	emu->emu1010.clock_source = emu->emu1010.clock_fallback;
-	emu->emu1010.wclock = 1 - emu->emu1010.clock_source;
+	emu->emu1010.wclock = (emu->emu1010.wclock & ~EMU_HANA_WCLOCK_SRC_MASK) |
+				(1 - emu->emu1010.clock_source);
 	snd_emu1010_update_clock(emu);
 	spin_unlock_irq(&emu->reg_lock);
 	snd_ctl_build_ioff(&id, emu->ctl_clock_source, 0);
@@ -795,14 +796,6 @@ static void emu1010_interrupt(struct snd_emu10k1 *emu)
 	schedule_work(&emu->emu1010.work);
 }
 
-/*
- * Current status of the driver:
- * ----------------------------
- * 	* only 44.1/48kHz supported (the MS Win driver supports up to 192 kHz)
- * 	* PCM device nb. 2:
- *		16 x 16-bit playback - snd_emu10k1_fx8010_playback_ops
- * 		16 x 32-bit capture - snd_emu10k1_capture_efx_ops
- */
 static int snd_emu10k1_emu1010_init(struct snd_emu10k1 *emu)
 {
 	u32 tmp, tmp2, reg;
@@ -879,12 +872,12 @@ static int snd_emu10k1_emu1010_init(struct snd_emu10k1 *emu)
 
 	emu->emu1010.clock_source = 1;  /* 48000 */
 	emu->emu1010.clock_fallback = 1;  /* 48000 */
+	emu->emu1010.clock_shift = 0;  /* 1x */
 	/* Default WCLK set to 48kHz. */
 	snd_emu1010_fpga_write(emu, EMU_HANA_DEFCLOCK, EMU_HANA_DEFCLOCK_48K);
 	/* Word Clock source, Internal 48kHz x1 */
 	emu->emu1010.wclock = EMU_HANA_WCLOCK_INT_48K;
 	snd_emu1010_fpga_write(emu, EMU_HANA_WCLOCK, EMU_HANA_WCLOCK_INT_48K);
-	/* snd_emu1010_fpga_write(emu, EMU_HANA_WCLOCK, EMU_HANA_WCLOCK_INT_48K | EMU_HANA_WCLOCK_4X); */
 	snd_emu1010_update_clock(emu);
 
 	// The routes are all set to EMU_SRC_SILENCE due to the reset,
