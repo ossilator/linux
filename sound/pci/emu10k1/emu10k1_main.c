@@ -652,13 +652,18 @@ static int snd_emu10k1_cardbus_init(struct snd_emu10k1 *emu)
 	return 0;
 }
 
-static void snd_emu1010_load_firmware_entry(struct snd_emu10k1 *emu,
+static void snd_emu1010_load_firmware_entry(struct snd_emu10k1 *emu, int dock,
 				     const struct firmware *fw_entry)
 {
 	int n, i;
 	u16 reg;
 	u8 value;
 	__always_unused u16 write_post;
+
+	// If the FPGA is already programmed, return it to programming mode
+	snd_emu1010_fpga_write(emu, EMU_HANA_FPGA_CONFIG,
+			       dock ? EMU_HANA_FPGA_CONFIG_AUDIODOCK :
+				      EMU_HANA_FPGA_CONFIG_HANA);
 
 	/* The FPGA is a Xilinx Spartan IIE XC2S50E */
 	/* On E-MU 0404b it is a Xilinx Spartan III XC3S50 */
@@ -724,7 +729,7 @@ static int snd_emu1010_load_firmware(struct snd_emu10k1 *emu, int dock,
 			return err;
 	}
 
-	snd_emu1010_load_firmware_entry(emu, *fw);
+	snd_emu1010_load_firmware_entry(emu, dock, *fw);
 	return 0;
 }
 
@@ -740,9 +745,6 @@ static void snd_emu1010_load_dock_firmware(struct snd_emu10k1 *emu)
 	msleep(200);
 
 	dev_info(emu->card->dev, "emu1010: Loading Audio Dock Firmware\n");
-	/* Return to Audio Dock programming mode */
-	snd_emu1010_fpga_write(emu, EMU_HANA_FPGA_CONFIG,
-			       EMU_HANA_FPGA_CONFIG_AUDIODOCK);
 	err = snd_emu1010_load_firmware(emu, 1, &emu->dock_fw);
 	if (err < 0)
 		return;
@@ -861,8 +863,6 @@ static int snd_emu10k1_emu1010_init(struct snd_emu10k1 *emu)
 	snd_emu1010_fpga_lock(emu);
 
 	dev_info(emu->card->dev, "emu1010: Loading Hana Firmware\n");
-	snd_emu1010_fpga_write(emu, EMU_HANA_FPGA_CONFIG,
-			       EMU_HANA_FPGA_CONFIG_HANA);
 	err = snd_emu1010_load_firmware(emu, 0, &emu->firmware);
 	if (err < 0) {
 		dev_info(emu->card->dev, "emu1010: Loading Firmware failed\n");
