@@ -273,21 +273,19 @@ int snd_emu10k1_i2c_write(struct snd_emu10k1 *emu,
 
 static void snd_emu1010_fpga_write_locked(struct snd_emu10k1 *emu, u32 reg, u32 value)
 {
-	__always_unused u16 write_post;
-
 	if (snd_BUG_ON(reg > 0x3f))
 		return;
 	reg += 0x40; /* 0x40 upwards are registers. */
 	if (snd_BUG_ON(value > 0x3f)) /* 0 to 0x3f are values */
 		return;
 	outw(reg, emu->port + A_GPIO);
-	write_post = inw(emu->port + A_GPIO);
+	udelay(10);
 	outw(reg | 0x80, emu->port + A_GPIO);  /* High bit clocks the value into the fpga. */
-	write_post = inw(emu->port + A_GPIO);
+	udelay(10);
 	outw(value, emu->port + A_GPIO);
-	write_post = inw(emu->port + A_GPIO);
+	udelay(10);
 	outw(value | 0x80 , emu->port + A_GPIO);  /* High bit clocks the value into the fpga. */
-	write_post = inw(emu->port + A_GPIO);
+	udelay(10);
 }
 
 void snd_emu1010_fpga_write(struct snd_emu10k1 *emu, u32 reg, u32 value)
@@ -306,8 +304,6 @@ void snd_emu1010_fpga_write_lock(struct snd_emu10k1 *emu, u32 reg, u32 value)
 
 void snd_emu1010_fpga_read(struct snd_emu10k1 *emu, u32 reg, u32 *value)
 {
-	__always_unused u16 write_post;
-
 	// The higest input pin is used as the designated interrupt trigger,
 	// so it needs to be masked out.
 	// But note that any other input pin change will also cause an IRQ,
@@ -320,8 +316,9 @@ void snd_emu1010_fpga_read(struct snd_emu10k1 *emu, u32 reg, u32 *value)
 		return;
 	reg += 0x40; /* 0x40 upwards are registers. */
 	outw(reg, emu->port + A_GPIO);
-	write_post = inw(emu->port + A_GPIO);
+	udelay(10);
 	outw(reg | 0x80, emu->port + A_GPIO);  /* High bit clocks the value into the fpga. */
+	udelay(10);
 	*value = ((inw(emu->port + A_GPIO) >> 8) & mask);
 }
 
