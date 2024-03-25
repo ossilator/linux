@@ -744,6 +744,7 @@ static void emu1010_dock_event(struct snd_emu10k1 *emu)
 	u32 reg;
 
 	snd_emu1010_fpga_read(emu, EMU_HANA_OPTION_CARDS, &reg); /* OPTIONS: Which cards are attached to the EMU */
+	dev_info(emu->card->dev, "emu1010: dock event, option cards = 0x%x\n", reg);
 	if (reg & EMU_HANA_OPTION_DOCK_OFFLINE) {
 		/* Audio Dock attached */
 		snd_emu1010_load_dock_firmware(emu);
@@ -764,6 +765,7 @@ static void emu1010_clock_event(struct snd_emu10k1 *emu)
 
 	spin_lock_irq(&emu->reg_lock);
 	snd_emu1010_fpga_read(emu, EMU_HANA_WCLOCK, &reg);
+	dev_info(emu->card->dev, "emu1010: clock event, wclock = 0x%x\n", reg);
 	if ((reg & EMU_HANA_WCLOCK_SRC_MASK) < 2) {
 		emu->emu1010.wclock = reg;
 		emu->emu1010.clock_source = emu->emu1010.clock_fallback;
@@ -794,6 +796,7 @@ static void emu1010_work(struct work_struct *work)
 	snd_emu1010_fpga_lock(emu);
 
 	snd_emu1010_fpga_read(emu, EMU_HANA_IRQ_STATUS, &sts);
+	dev_info(emu->card->dev, "emu1010: GPIO event, IRQ status = 0x%x\n", sts);
 
 	// The distinction of the IRQ status bits is unreliable,
 	// so we dispatch later based on option card status.
@@ -811,6 +814,7 @@ static void emu1010_interrupt(struct snd_emu10k1 *emu)
 	// We get an interrupt on each GPIO input pin change, but we
 	// care only about the ones triggered by the dedicated pin.
 	u16 sts = inw(emu->port + A_GPIO);
+	//dev_info(emu->card->dev, "emu1010: GPIO interrupt, pin status = 0x%04x\n", sts);
 	u16 bit = emu->card_capabilities->ca0108_chip ? 0x2000 : 0x8000;
 	if (!(sts & bit))
 		return;
