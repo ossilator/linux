@@ -6,6 +6,7 @@
  */
 
 #include <linux/export.h>
+//#include <linux/delay.h>
 #include "emu10k1_synth_local.h"
 #include <sound/asoundef.h>
 
@@ -120,6 +121,7 @@ release_voice(struct snd_emux_voice *vp)
 	struct snd_emu10k1 *hw;
 	
 	hw = vp->hw;
+	dev_info(hw->card->dev, "emu synth: release voice %d\n", vp->ch);
 	snd_emu10k1_ptr_write_multiple(hw, vp->ch,
 		DCYSUSM, (unsigned char)vp->reg.parm.modrelease | DCYSUSM_PHASE1_MASK,
 		DCYSUSV, (unsigned char)vp->reg.parm.volrelease | DCYSUSV_PHASE1_MASK | DCYSUSV_CHANNELENABLE_MASK,
@@ -138,6 +140,7 @@ terminate_voice(struct snd_emux_voice *vp)
 	if (snd_BUG_ON(!vp))
 		return;
 	hw = vp->hw;
+	dev_info(hw->card->dev, "emu synth: terminate voice %d\n", vp->ch);
 	snd_emu10k1_ptr_write_multiple(hw, vp->ch,
 		DCYSUSV, 0,
 		VTFT, VTFT_FILTERTARGET_MASK,
@@ -183,22 +186,36 @@ update_voice(struct snd_emux_voice *vp, int update)
 	struct snd_emu10k1 *hw;
 	
 	hw = vp->hw;
+	dev_info(hw->card->dev, "emu synth: update voice %d\n", vp->ch);
 	if (update & SNDRV_EMUX_UPDATE_VOLUME)
+{		dev_info(hw->card->dev, "  vol %d\n", vp->avol);
 		snd_emu10k1_ptr_write(hw, IFATN_ATTENUATION, vp->ch, vp->avol);
+}
 	if (update & SNDRV_EMUX_UPDATE_PITCH)
+{		dev_info(hw->card->dev, "  pitch %d\n", vp->apitch);
 		snd_emu10k1_ptr_write(hw, IP, vp->ch, vp->apitch);
+}
 	if (update & SNDRV_EMUX_UPDATE_PAN) {
+		dev_info(hw->card->dev, "  pan %d  aux %d\n", vp->apan, vp->aaux);
 		snd_emu10k1_ptr_write(hw, PTRX_FXSENDAMOUNT_A, vp->ch, vp->apan);
 		snd_emu10k1_ptr_write(hw, PTRX_FXSENDAMOUNT_B, vp->ch, vp->aaux);
 	}
 	if (update & SNDRV_EMUX_UPDATE_FMMOD)
+{		dev_info(hw->card->dev, "  fmmod %#x\n", make_fmmod(vp));
 		snd_emu10k1_ptr_write(hw, FMMOD, vp->ch, make_fmmod(vp));
+}
 	if (update & SNDRV_EMUX_UPDATE_TREMFREQ)
+	{		dev_info(hw->card->dev, "  tremfrq %#x\n", vp->reg.parm.tremfrq);
 		snd_emu10k1_ptr_write(hw, TREMFRQ, vp->ch, vp->reg.parm.tremfrq);
+}
 	if (update & SNDRV_EMUX_UPDATE_FM2FRQ2)
+{		dev_info(hw->card->dev, "  fm2frq2 %#x\n", make_fm2frq2(vp));
 		snd_emu10k1_ptr_write(hw, FM2FRQ2, vp->ch, make_fm2frq2(vp));
+}
 	if (update & SNDRV_EMUX_UPDATE_Q)
+{		dev_info(hw->card->dev, "  filterq %d\n", vp->reg.parm.filterQ);
 		snd_emu10k1_ptr_write(hw, CCCA_RESONANCE, vp->ch, vp->reg.parm.filterQ);
+}
 }
 
 
@@ -333,6 +350,8 @@ start_voice(struct snd_emux_voice *vp)
 		return -ENOMEM;
 	}
 	mapped_offset = snd_emu10k1_memblk_offset(emem) >> w_16;
+	dev_info(hw->card->dev, "emu synth: start voice %d, offset %#x, strt %#x, lpstrt %#x, lpend %#x, end %#x, pitch %d\n",
+		 ch, mapped_offset, vp->reg.start, vp->reg.loopstart, vp->reg.loopend, vp->reg.end, vp->apitch);
 	vp->reg.start += mapped_offset;
 	vp->reg.end += mapped_offset;
 	vp->reg.loopstart += mapped_offset;
@@ -343,6 +362,7 @@ start_voice(struct snd_emux_voice *vp)
 	if (hw->audigy) {
 		temp = FXBUS_MIDI_LEFT | (FXBUS_MIDI_RIGHT << 8) | 
 			(FXBUS_MIDI_REVERB << 16) | (FXBUS_MIDI_CHORUS << 24);
+dev_info(hw->card->dev, "  fxrt %#x\n", temp);
 		snd_emu10k1_ptr_write(hw, A_FXRT1, ch, temp);
 	} else {
 		temp = (FXBUS_MIDI_LEFT << 16) | (FXBUS_MIDI_RIGHT << 20) | 
@@ -353,12 +373,14 @@ start_voice(struct snd_emux_voice *vp)
 	temp = vp->reg.parm.reverb;
 	temp += (int)vp->chan->control[MIDI_CTL_E1_REVERB_DEPTH] * 9 / 10;
 	LIMITMAX(temp, 255);
+dev_info(hw->card->dev, "  reverb %d\n", temp);
 	addr = vp->reg.loopstart;
 	psst = (temp << 24) | addr;
 
 	addr = vp->reg.loopend;
 	temp = vp->reg.parm.chorus;
 	temp += (int)chan->control[MIDI_CTL_E3_CHORUS_DEPTH] * 9 / 10;
+dev_info(hw->card->dev, "  chorus %d\n", temp);
 	LIMITMAX(temp, 255);
 	dsl = (temp << 24) | addr;
 
@@ -366,6 +388,7 @@ start_voice(struct snd_emux_voice *vp)
 
 	addr = vp->reg.start + 64 - 3;
 	temp = vp->reg.parm.filterQ;
+dev_info(hw->card->dev, "  filterq %d\n", temp);
 	ccca = (temp << 28) | addr;
 	if (vp->apitch < 0xe400)
 		ccca |= CCCA_INTERPROM_0;
@@ -376,7 +399,28 @@ start_voice(struct snd_emux_voice *vp)
 	if (!w_16)
 		ccca |= CCCA_8BITSELECT;
 
+dev_info(hw->card->dev, "  filt target %d\n", vp->ftarget);
+dev_info(hw->card->dev, "  vol target %d\n", vp->vtarget);
 	vtarget = (unsigned int)vp->vtarget << 16;
+
+dev_info(hw->card->dev, "  mod delay %d\n", vp->reg.parm.moddelay);
+dev_info(hw->card->dev, "  mod attack & hold %#x\n", vp->reg.parm.modatkhld);
+dev_info(hw->card->dev, "  mod decay & sustain %#x\n", vp->reg.parm.moddcysus);
+dev_info(hw->card->dev, "  vol delay %d\n", vp->reg.parm.voldelay);
+dev_info(hw->card->dev, "  vol attack & hold %#x\n", vp->reg.parm.volatkhld);
+
+dev_info(hw->card->dev, "  pitch & filter amount %#x\n", vp->reg.parm.pefe);
+
+dev_info(hw->card->dev, "  lfo1 delay %d\n", vp->reg.parm.lfo1delay);
+dev_info(hw->card->dev, "  lfo2 delay %d\n", vp->reg.parm.lfo2delay);
+
+dev_info(hw->card->dev, "  filt cutoff %d\n", vp->acutoff);
+dev_info(hw->card->dev, "  vol %d\n", vp->avol);
+dev_info(hw->card->dev, "  pitch %d\n", vp->apitch);
+
+dev_info(hw->card->dev, "  fmmod %#x\n", make_fmmod(vp));
+dev_info(hw->card->dev, "  tremfrq %#x\n", vp->reg.parm.tremfrq);
+dev_info(hw->card->dev, "  fm2frq2 %#x\n", make_fm2frq2(vp));
 
 	snd_emu10k1_ptr_write_multiple(hw, ch,
 		/* channel to be silent and idle */
@@ -461,11 +505,15 @@ trigger_voice(struct snd_emux_voice *vp)
 	if (! emem || emem->mapped_page < 0)
 		return; /* not mapped */
 
+dev_info(hw->card->dev, "emu synth: trigger voice %d\n", vp->ch);
+dev_info(hw->card->dev, "  pan %d  aux %d\n", vp->apan, vp->aaux);
+dev_info(hw->card->dev, "  vol decay & sustain %#x\n", vp->reg.parm.voldcysus);
 #if 0
 	ptarget = (unsigned int)vp->ptarget << 16;
 #else
 	ptarget = IP_TO_CP(vp->apitch);
 #endif
+dev_info(hw->card->dev, "  pitch target %d (orig %d)\n", ptarget >> 16, vp->ptarget);
 	snd_emu10k1_ptr_write_multiple(hw, vp->ch,
 		/* set pitch target and pan (volume) */
 		PTRX, ptarget | (vp->apan << 8) | vp->aaux,
@@ -477,6 +525,10 @@ trigger_voice(struct snd_emux_voice *vp)
 		DCYSUSV, vp->reg.parm.voldcysus | DCYSUSV_CHANNELENABLE_MASK,
 
 		REGLIST_END);
+//udelay(1000);
+//int cpt = snd_emu10k1_ptr_read(hw, PTRX_PITCHTARGET, vp->ch);
+//int cp = snd_emu10k1_ptr_read(hw, CPF_CURRENTPITCH, vp->ch);
+//dev_info(hw->card->dev, "  now pitch tgt %d  curr pitch %d\n", cpt, cp);
 }
 
 #define MOD_SENSE 18
