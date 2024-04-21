@@ -1507,6 +1507,18 @@ static const u8 emu1010_clock_vals[] = {
 	EMU_HANA_WCLOCK_SYNC_BNC,
 };
 
+static const char * const emu1616_clock_texts[] = {
+	"44100", "48000", "Dock"
+};
+
+static const u8 emu1616_clock_vals[] = {
+	EMU_HANA_WCLOCK_INT_44_1K,
+	EMU_HANA_WCLOCK_INT_48K,
+	// Explicit ADAT and S/PDIF settings also work, but as everything goes
+	// through the Dock anyway, the redundant options just add confusion.
+	EMU_HANA_WCLOCK_2ND_HANA,
+};
+
 static const char * const emu0404_clock_texts[] = {
 	"44100", "48000", "SPDIF", "BNC"
 };
@@ -1539,17 +1551,9 @@ static const struct snd_emu1010_clock_info emu1010_clock_info[] = {
 	},
 	{
 		// 1616(m) CardBus
-		.texts = emu1010_clock_texts,
-		// TODO: determine what is actually available.
-		// Pedantically, *every* source comes from the 2nd FPGA, as the
-		// card itself has no own (digital) audio ports. The user manual
-		// claims that ADAT and S/PDIF clock sources are separate, which
-		// can mean two things: either E-MU mapped the dock's sources to
-		// the primary ones, or they determine the meaning of the "Dock"
-		// source depending on how the ports are actually configured
-		// (which the 2nd FPGA must be doing anyway).
-		.vals = emu1010_clock_vals,
-		.num = ARRAY_SIZE(emu1010_clock_vals),
+		.texts = emu1616_clock_texts,
+		.vals = emu1616_clock_vals,
+		.num = ARRAY_SIZE(emu1616_clock_vals),
 	},
 	{
 		// 0404
