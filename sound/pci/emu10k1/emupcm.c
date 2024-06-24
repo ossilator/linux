@@ -123,7 +123,7 @@ static int snd_emu10k1_pcm_channel_alloc(struct snd_emu10k1_pcm *epcm,
 
 // Primes 2-7 and 2^n multiples thereof, up to 16.
 static const unsigned int efx_capture_channels[] = {
-	1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16
+	1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 32
 };
 
 static const struct snd_pcm_hw_constraint_list hw_constraints_efx_capture_channels = {
@@ -546,14 +546,14 @@ static int snd_emu10k1_capture_prepare(struct snd_pcm_substream *substream)
 		break;
 	case CAPTURE_EFX:
 		if (emu->card_capabilities->emu_model) {
-			unsigned mask = 0xffffffff >> (32 - runtime->channels * 2);
+			uint64_t mask = ~0ULL >> (64 - runtime->channels * 2);
 			if (emu->das_mode) {
 				unsigned shift = emu->emu1010.clock_shift;
 				if (shift) {
 					if (emu->card_capabilities->emu_in_32) {
 						if (shift == 2)
 							mask |= mask << 16;
-						epcm->capture_cr_val2 = mask;
+						epcm->capture_cr_val2 = (uint) mask;
 					} else {
 						if (shift == 2)
 							mask |= mask << 8;
@@ -561,14 +561,14 @@ static int snd_emu10k1_capture_prepare(struct snd_pcm_substream *substream)
 						epcm->capture_cr_val2 = 0;
 					}
 				} else {
-					epcm->capture_cr_val2 = 0;
+					epcm->capture_cr_val2 = (uint) (mask >> 32);
 				}
-				epcm->capture_cr_val = mask;
+				epcm->capture_cr_val = (uint) mask;
 			} else {
 				// The upper 32 16-bit capture voices, two for each of the 16 32-bit channels.
 				// The lower voices are occupied by A_EXTOUT_*_CAP*.
 				epcm->capture_cr_val = 0;
-				epcm->capture_cr_val2 = mask;
+				epcm->capture_cr_val2 = (uint) mask;
 			}
 		}
 		if (emu->audigy) {
@@ -1615,8 +1615,8 @@ static int snd_emu10k1_capture_efx_open(struct snd_pcm_substream *substream)
 		 */
 		if (emu->das_mode)
 			runtime->hw.channels_max =
-				min(16, 32 >> (emu->emu1010.clock_shift +
-					       !emu->card_capabilities->emu_in_32));
+				32 >> (emu->emu1010.clock_shift +
+					       !emu->card_capabilities->emu_in_32);
 		runtime->hw.formats = SNDRV_PCM_FMTBIT_S32_LE;
 	} else {
 		spin_lock_irq(&emu->reg_lock);

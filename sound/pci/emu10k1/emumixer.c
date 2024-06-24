@@ -828,6 +828,22 @@ static const char * const emu1010_das_input_texts[] = {
 	"CpChn 13 Capture Enum",
 	"CpChn 14 Capture Enum",
 	"CpChn 15 Capture Enum",
+	"CpChn 16 Capture Enum",
+	"CpChn 17 Capture Enum",
+	"CpChn 18 Capture Enum",
+	"CpChn 19 Capture Enum",
+	"CpChn 20 Capture Enum",
+	"CpChn 21 Capture Enum",
+	"CpChn 22 Capture Enum",
+	"CpChn 23 Capture Enum",
+	"CpChn 24 Capture Enum",
+	"CpChn 25 Capture Enum",
+	"CpChn 26 Capture Enum",
+	"CpChn 27 Capture Enum",
+	"CpChn 28 Capture Enum",
+	"CpChn 29 Capture Enum",
+	"CpChn 30 Capture Enum",
+	"CpChn 31 Capture Enum",
 };
 
 static const unsigned short emu1010_input_dst[] = {
@@ -907,6 +923,42 @@ static const unsigned short emu1010_4x_input_dst[][4] = {
 };
 static_assert(ARRAY_SIZE(emu1010_4x_input_dst) <= NUM_INPUT_DESTS);
 
+static const unsigned short emu1010b_input_dst[] = {
+	EMU_DST_ALICE2_EMU32_0,
+	EMU_DST_ALICE2_EMU32_1,
+	EMU_DST_ALICE2_EMU32_2,
+	EMU_DST_ALICE2_EMU32_3,
+	EMU_DST_ALICE2_EMU32_4,
+	EMU_DST_ALICE2_EMU32_5,
+	EMU_DST_ALICE2_EMU32_6,
+	EMU_DST_ALICE2_EMU32_7,
+	EMU_DST_ALICE2_EMU32_8,
+	EMU_DST_ALICE2_EMU32_9,
+	EMU_DST_ALICE2_EMU32_A,
+	EMU_DST_ALICE2_EMU32_B,
+	EMU_DST_ALICE2_EMU32_C,
+	EMU_DST_ALICE2_EMU32_D,
+	EMU_DST_ALICE2_EMU32_E,
+	EMU_DST_ALICE2_EMU32_F,
+	EMU_DST_TINA_EMU32B_0,
+	EMU_DST_TINA_EMU32B_1,
+	EMU_DST_TINA_EMU32B_2,
+	EMU_DST_TINA_EMU32B_3,
+	EMU_DST_TINA_EMU32B_4,
+	EMU_DST_TINA_EMU32B_5,
+	EMU_DST_TINA_EMU32B_6,
+	EMU_DST_TINA_EMU32B_7,
+	EMU_DST_TINA_EMU32B_8,
+	EMU_DST_TINA_EMU32B_9,
+	EMU_DST_TINA_EMU32B_A,
+	EMU_DST_TINA_EMU32B_B,
+	EMU_DST_TINA_EMU32B_C,
+	EMU_DST_TINA_EMU32B_D,
+	EMU_DST_TINA_EMU32B_E,
+	EMU_DST_TINA_EMU32B_F,
+};
+static_assert(ARRAY_SIZE(emu1010b_input_dst) == ARRAY_SIZE(emu1010_das_input_texts));
+
 static const unsigned short emu1010b_2x_input_dst[][2] = {
 	{ EMU_DST_ALICE2_EMU32_0, EMU_DST_TINA_EMU32B_0 },
 	{ EMU_DST_ALICE2_EMU32_1, EMU_DST_TINA_EMU32B_1 },
@@ -938,6 +990,42 @@ static const unsigned short emu1010b_4x_input_dst[][4] = {
 	{ EMU_DST_ALICE2_EMU32_7, EMU_DST_ALICE2_EMU32_F, EMU_DST_TINA_EMU32B_7, EMU_DST_TINA_EMU32B_F },
 };
 static_assert(ARRAY_SIZE(emu1010b_4x_input_dst) <= NUM_INPUT_DESTS);
+
+static const unsigned short emu1616_input_dst[] = {
+	EMU_DST_ALICE2_EMU32_0,
+	EMU_DST_ALICE2_EMU32_1,
+	EMU_DST_ALICE2_EMU32_2,
+	EMU_DST_ALICE2_EMU32_3,
+	EMU_DST_ALICE2_EMU32_4,
+	EMU_DST_ALICE2_EMU32_5,
+	EMU_DST_ALICE2_EMU32_6,
+	EMU_DST_ALICE2_EMU32_7,
+	EMU_DST_ALICE2_EMU32_8,
+	EMU_DST_ALICE2_EMU32_9,
+	EMU_DST_ALICE2_EMU32_A,
+	EMU_DST_ALICE2_EMU32_B,
+	EMU_DST_ALICE2_EMU32_C,
+	EMU_DST_ALICE2_EMU32_D,
+	EMU_DST_ALICE2_EMU32_E,
+	EMU_DST_ALICE2_EMU32_F,
+	EMU_DST_TINA2_EMU32B_0,
+	EMU_DST_TINA2_EMU32B_1,
+	EMU_DST_TINA2_EMU32B_2,
+	EMU_DST_TINA2_EMU32B_3,
+	EMU_DST_TINA2_EMU32B_4,
+	EMU_DST_TINA2_EMU32B_5,
+	EMU_DST_TINA2_EMU32B_6,
+	EMU_DST_TINA2_EMU32B_7,
+	EMU_DST_TINA2_EMU32B_8,
+	EMU_DST_TINA2_EMU32B_9,
+	EMU_DST_TINA2_EMU32B_A,
+	EMU_DST_TINA2_EMU32B_B,
+	EMU_DST_TINA2_EMU32B_C,
+	EMU_DST_TINA2_EMU32B_D,
+	EMU_DST_TINA2_EMU32B_E,
+	EMU_DST_TINA2_EMU32B_F,
+};
+static_assert(ARRAY_SIZE(emu1616_input_dst) == ARRAY_SIZE(emu1010_das_input_texts));
 
 static const unsigned short emu1616_2x_input_dst[][2] = {
 	{ EMU_DST_ALICE2_EMU32_0, EMU_DST_TINA2_EMU32B_0 },
@@ -1039,8 +1127,8 @@ static const struct snd_emu1010_routing_info emu1010_routing_info[] = {
 			    ARRAY_SIZE(snd_emu1010b_2x_output_texts), ARRAY_SIZE(snd_emu1010b_4x_output_texts) },
 
 		.in_dflts = emu1010_input_dflt,
-		.in_regs = { emu1010_input_dst, emu1010b_2x_input_dst[0], emu1010b_4x_input_dst[0] },
-		.n_ins = { ARRAY_SIZE(emu1010_input_dst) - 6, 16, 16, 8 },
+		.in_regs = { emu1010b_input_dst, emu1010b_2x_input_dst[0], emu1010b_4x_input_dst[0] },
+		.n_ins = { 16, 32, 16, 8 },
 	},
 	{
 		/* 1616(m) cardbus */
@@ -1058,8 +1146,8 @@ static const struct snd_emu1010_routing_info emu1010_routing_info[] = {
 			    ARRAY_SIZE(snd_emu1616_2x_output_texts), ARRAY_SIZE(snd_emu1616_4x_output_texts) },
 
 		.in_dflts = emu1010_input_dflt,
-		.in_regs = { emu1010_input_dst, emu1616_2x_input_dst[0], emu1616_4x_input_dst[0] },
-		.n_ins = { ARRAY_SIZE(emu1010_input_dst) - 6, 16, 16, 8 },
+		.in_regs = { emu1616_input_dst, emu1616_2x_input_dst[0], emu1616_4x_input_dst[0] },
+		.n_ins = { 16, 32, 16, 8 },
 	},
 	{
 		/* 0404 */
@@ -1153,7 +1241,7 @@ static u8 emu1010_map_source(const struct snd_emu1010_routing_info *emu_ri,
 	return 0;
 }
 
-static const unsigned internal_sources[3] = { 16, 16, 8 };
+static const unsigned internal_sources[3] = { 32, 16, 8 };
 
 static unsigned emu1010_remap_source(const struct snd_emu1010_routing_info *emu_ri,
 				     unsigned oshift, unsigned nshift, unsigned src)
