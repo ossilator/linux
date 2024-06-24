@@ -1725,7 +1725,7 @@ struct snd_emu_chip_details {
 };
 
 #define NUM_OUTPUT_DESTS 28
-#define NUM_INPUT_DESTS 22
+#define NUM_INPUT_DESTS 32
 
 struct snd_emu1010 {
 	unsigned char output_source[NUM_OUTPUT_DESTS];
