@@ -864,10 +864,8 @@ static int tas2781_runtime_suspend(struct device *dev)
 	/* The driver powers up the amplifiers at module load time.
 	 * Stop the playback if it's unused.
 	 */
-	if (tas_hda->priv->playback_started) {
+	if (tas_hda->priv->playback_started)
 		tasdevice_tuning_switch(tas_hda->priv, 1);
-		tas_hda->priv->playback_started = false;
-	}
 
 	mutex_unlock(&tas_hda->priv->codec_lock);
 
@@ -889,6 +887,9 @@ static int tas2781_runtime_resume(struct device *dev)
 	 */
 	tasdevice_apply_calibration(tas_hda->priv);
 
+	if (tas_hda->priv->playback_started)
+		tasdevice_tuning_switch(tas_hda->priv, 0);
+
 	mutex_unlock(&tas_hda->priv->codec_lock);
 
 	return 0;
@@ -900,19 +901,7 @@ static int tas2781_system_suspend(struct device *dev)
 
 	dev_dbg(tas_hda->priv->dev, "System Suspend\n");
 
-	mutex_lock(&tas_hda->priv->codec_lock);
-
-	/* Shutdown chip before system suspend */
-	if (tas_hda->priv->playback_started)
-		tasdevice_tuning_switch(tas_hda->priv, 1);
-
-	mutex_unlock(&tas_hda->priv->codec_lock);
-
-	/*
-	 * Reset GPIO may be shared, so cannot reset here.
-	 * However beyond this point, amps may be powered down.
-	 */
-	return 0;
+	return pm_runtime_force_suspend(dev);
 }
 
 static int tas2781_system_resume(struct device *dev)
@@ -923,26 +912,15 @@ static int tas2781_system_resume(struct device *dev)
 	dev_dbg(tas_hda->priv->dev, "System Resume\n");
 
 	mutex_lock(&tas_hda->priv->codec_lock);
-
 	for (i = 0; i < tas_hda->priv->ndev; i++) {
 		tas_hda->priv->tasdevice[i].cur_book = -1;
 		tas_hda->priv->tasdevice[i].cur_prog = -1;
 		tas_hda->priv->tasdevice[i].cur_conf = -1;
 	}
 	tasdevice_reset(tas_hda->priv);
-	tasdevice_prmg_load(tas_hda->priv, tas_hda->priv->cur_prog);
-
-	/* If calibrated data occurs error, dsp will still work with default
-	 * calibrated data inside algo.
-	 */
-	tasdevice_apply_calibration(tas_hda->priv);
-
-	if (tas_hda->priv->playback_started)
-		tasdevice_tuning_switch(tas_hda->priv, 0);
-
 	mutex_unlock(&tas_hda->priv->codec_lock);
 
-	return 0;
+	return pm_runtime_force_resume(dev);
 }
 
 static const struct dev_pm_ops tas2781_hda_pm_ops = {
